@@ -16,6 +16,72 @@ from .cal import calibrate_JWST_flux,calibrate_HST_flux,calc_jwst_psf_corr,calc_
 
 __all__ = ['observation3','observation2']
 
+
+def loglike(parameters,psf_models,wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,xb,yb,multi_flux,fit_radec,fit_pixel):
+
+    parameters = xb*parameters + yb
+    print(parameters)
+    total = 0
+    for i in range(len(fluxes)):
+        posx = xs[i]
+        posy = ys[i]
+        
+        if multi_flux:
+            psf_models[i].flux = parameters[vparam_names.index('flux%i'%i)]
+        else:
+            psf_models[i].flux = parameters[vparam_names.index('flux')]
+
+        if fit_radec:
+            sky_location = astropy.coordinates.SkyCoord(parameters[vparam_names.index('ra')],
+                                                        parameters[vparam_names.index('dec')],
+                                                        unit=astropy.units.deg)
+            y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,wcs_list[i])
+            psf_models[i].x_0 = x
+            psf_models[i].y_0 = y
+        elif fit_pixel:
+            psf_models[i].x_0 = parameters[vparam_names.index('x%i'%(i))]
+            psf_models[i].y_0 = parameters[vparam_names.index('y%i'%(i))]
+
+        mflux = psf_models[i](posx,posy)
+        #print(np.nanmax(mflux),np.nanmax(fluxes[i]))
+        if fit_bkg:
+            if multi_flux:
+                mflux+=parameters[vparam_names.index('bkg%i'%i)]
+            else:
+                mflux+=parameters[vparam_names.index('bkg')]
+        
+        total+=np.nansum((fluxes[i]-mflux)**2/fluxerrs[i]**2)
+    print(-.5*total)
+    return -.5*total
+
+def prior_transform(parameters):
+    return parameters 
+    
+
+def do_nest(args):
+    from dynesty import NestedSampler
+    from dynesty import utils as dyfunc
+    from dynesty.pool import Pool
+    import dill
+    import dynesty.utils
+    dynesty.utils.pickle_module = dill
+    psf_model_list,wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,bounds,multi_flux,fit_radec,fit_pixel = args
+    xb = []
+    yb = []
+    for bound in bounds:
+        x,y = np.linalg.solve(np.array([[0.5,1],[1,1]]),np.array([bound[0]+(bound[1]-bound[0])/2,bound[1]]))
+        xb.append(x)
+        yb.append(y)
+    print(bounds)
+    args = psf_model_list,wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,np.array(xb),np.array(yb),multi_flux,fit_radec,fit_pixel
+    print(loglike(np.array([.5]*len(vparam_names)),psf_model_list,wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,np.array(xb),np.array(yb),multi_flux,fit_radec,fit_pixel))
+    #ptfm = prior_transform([bounds[p] for p in vparam_names])
+    with Pool(10, loglike, prior_transform,logl_args=args) as pool:
+        sampler = NestedSampler(pool.loglike, pool.prior_transform,
+                                len(vparam_names), pool = pool)
+        sampler.run_nested()
+    return sampler
+
 class observation():
     def __init__(self):
         pass
@@ -217,16 +283,26 @@ class observation():
                 #mflux*=self.pams[i][posx,posy]
                 if False:#1<self.psf_model_list[i].flux<3:
                     fig,axes = plt.subplots(1,3)
-                    axes[0].imshow(fluxes[i],origin='lower',vmin=-1,vmax=1,cmap='seismic')
-                    axes[1].imshow(mflux,origin='lower',vmin=-1,vmax=1,cmap='seismic')
-                    im1 = axes[2].imshow(fluxes[i]-mflux,origin='lower',vmin=-1,vmax=1,cmap='seismic')
-                    divider = make_axes_locatable(axes[2])
+                    im0 = axes[0].imshow(fluxes[i],origin='lower',
+                        #vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[0])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im0, cax=cax, orientation='vertical')
+                    im1 = axes[1].imshow(mflux,origin='lower',#vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[1])
                     cax = divider.append_axes('right', size='5%', pad=0.05)
                     fig.colorbar(im1, cax=cax, orientation='vertical')
+                    im2 = axes[2].imshow(fluxes[i]-mflux,origin='lower',#vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[2])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im2, cax=cax, orientation='vertical')
                     #plt.imshow(fluxes[i],origin='lower')
                     plt.show()
                     print(parameters,np.nansum((fluxes[i]-mflux)**2/fluxerrs[i]**2),
-                        np.sum(fluxes[i]-mflux),np.min((fluxes[i]-mflux)),np.max((fluxes[i]-mflux)))
+                        np.nansum(fluxes[i]-mflux),np.nanmin((fluxes[i]-mflux)),np.nanmax((fluxes[i]-mflux)))
                 #plt.imshow(mflux)
                 #plt.show()
                 # print(np.sum(fluxes[i]),np.sum(mflux))
@@ -260,14 +336,48 @@ class observation():
             chisq = chisq_likelihood(parameters)
             return(-.5*chisq)
         
+        #from dynesty import NestedSampler
+        #from dynesty import utils as dyfunc
+        #from dynesty.pool import Pool
+        #import dill
+        #import dynesty.utils
+        #dynesty.utils.pickle_module = dill
+
+        #args = self.psf_model_list,self.wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,[bounds[p] for p in vparam_names],multi_flux,fit_radec,fit_pixel
+        #sampler = do_nest(args)
+        
 
         res = nestle.sample(loglike, prior_transform, ndim, npdim=npdim,
-                            npoints=npoints, method=method, maxiter=maxiter,
-                            maxcall=maxcall, rstate=rstate,
-                            callback=(nestle.print_progress if verbose else None))
+                          npoints=npoints, method=method, maxiter=maxiter,
+                          maxcall=maxcall, rstate=rstate,
+                          callback=(nestle.print_progress if verbose else None))
+        #res = sampler.results
 
         vparameters, cov = nestle.mean_and_cov(res.samples, res.weights)
+        #samples, weights = res.samples, res.importance_weights()
 
+        #vparameters, cov = dyfunc.mean_and_cov(samples, weights)
+        # res = sncosmo.utils.Result(niter=res.niter,
+        #                            ncall=res.ncall,
+        #                            logz=res.logz,
+        #                            logzerr=res.logzerr,
+        #                            eff=res.eff,
+        #                            h=res.information,
+        #                            samples=res.samples,
+        #                            logwt=res.logwt,
+        #                            weights=res.importance_weights,
+        #                            logvol=res.logvol,
+        #                            logl=res.logl,
+        #                            errors=OrderedDict(zip(vparam_names,
+        #                                                   np.sqrt(np.diagonal(cov)))),
+        #                            vparam_names=copy(vparam_names),
+        #                            bounds=bounds,
+        #                            best=vparameters,
+        #                            data_arr = fluxes,
+        #                            psf_arr = None,
+        #                            big_psf_arr = None,
+        #                            resid_arr = None,
+        #                            phot_cal_table = None)
         res = sncosmo.utils.Result(niter=res.niter,
                                    ncall=res.ncall,
                                    logz=res.logz,
@@ -350,8 +460,11 @@ class observation():
         fig,axes = plt.subplots(self.n_exposures,3,figsize=(int(3*self.n_exposures),10))
         axes = np.atleast_2d(axes)
         for i in range(self.n_exposures):
-            norm1 = astropy.visualization.simple_norm(self.psf_result.data_arr[i],stretch='linear',
-                invalid=0)
+            try:
+                norm1 = astropy.visualization.simple_norm(self.psf_result.data_arr[i],stretch='linear',
+                    invalid=0)
+            except:
+                norm1 = None
             axes[i][0].imshow(self.psf_result.data_arr[i],
                 norm=norm1)
             axes[i][0].set_title('Data')
@@ -453,12 +566,15 @@ class observation3(observation):
         try:
             self.flux_units = astropy.units.Unit(self.sci_header['BUNIT'])
         except:
-            if self.telescope=='JWST':
-                print('Cannot create flux_units from header...asuming MJy/sr')
-                self.flux_units = astropy.units.MJy/astropy.units.sr
-            else:
-                print('Cannot create flux_units from header...asuming electrons/s')
-                self.flux_units = astropy.units.electron/astropy.units.s
+            try:
+                self.flux_units = astropy.units.Unit(self.prim_header['BUNIT'])
+            except:
+                if self.telescope=='JWST':
+                    print('Cannot create flux_units from header...asuming MJy/sr')
+                    self.flux_units = astropy.units.MJy/astropy.units.sr
+                else:
+                    print('Cannot create flux_units from header...asuming electrons/s')
+                    self.flux_units = astropy.units.electron/astropy.units.s
         try:
             self.detector = self.prim_header['DETECTOR']
             self.detector = self.detector.replace('LONG','5')
@@ -499,7 +615,7 @@ class observation3(observation):
 
     def psf_photometry(self,psf_model,sky_location=None,xy_position=None,fit_width=None,background=None,
                         fit_flux=True,fit_centroid=True,fit_bkg=False,bounds={},npoints=100,use_MLE=False,
-                        maxiter=None,find_centroid=False,minVal=False,psf_method='fast'):
+                        maxiter=None,find_centroid=False,minVal=False,psf_method='nest'):
         """
         st_phot psf photometry class for level 2 data.
 
@@ -615,11 +731,11 @@ class observation3(observation):
         
         cutouts.append(cutout)
         if fit_flux:
-            if all_bg_est!=0:
-                f_guess = [np.nansum(cutout)]
-            else:
-                f_guess = [np.nansum(cutout-np.nanmedian(self.data))]
-            pnames = ['flux']
+            #if all_bg_est!=0:
+            f_guess = [16*np.nansum(cutout-all_bkg_est)]
+            #else:
+            #    f_guess = [np.nansum(cutout-np.nanmedian(self.data))]
+            #pnames = ['flux']
         else:
             f_guess = []
             pnames = []
@@ -988,6 +1104,7 @@ class observation2(observation):
     """
     def __init__(self,exposure_fnames,sci_ext=1):
         self.pipeline_level = 2
+        self.sci_ext = int(sci_ext)
         self.exposure_fnames = exposure_fnames if not isinstance(exposure_fnames,str) else [exposure_fnames]
         self.exposures = [astropy.io.fits.open(f) for f in self.exposure_fnames]
         self.data_arr = [im['SCI',sci_ext].data for im in self.exposures]
@@ -1037,7 +1154,7 @@ class observation2(observation):
         self.px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs_list[0])[0] *\
                                                     self.wcs_list[0].wcs.cunit[0].to('arcsec')
 
-    
+
     def upper_limit(self,nsigma=3,method='psf'):
         if method.lower()=='psf':
             try:
@@ -1370,10 +1487,10 @@ class observation2(observation):
             cutout_errs.append(err)
             
             if fit_flux!='fixed':
-                if all_bg_est[im]!=0:
-                    f_guess = np.nansum(cutout-all_bg_est[im])
-                else:
-                    f_guess = np.nansum(cutout-np.nanmedian(self.data_arr_pam[im]))
+                #if all_bg_est[im]!=0 or True:
+                f_guess = 16*np.nansum(cutout-all_bg_est[im])
+                #else:
+                #    f_guess = np.nansum(cutout-np.nanmedian(self.data_arr_pam[im]))
                 fluxg.append(f_guess)
 
         if fit_flux=='single':

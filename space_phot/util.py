@@ -400,6 +400,7 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
     outdir = os.path.join(os.path.abspath(os.path.dirname(__file__)),'temp_%i'%np.random.randint(0,1000))
     os.mkdir(outdir)
     try:
+    #if True:
         out_fnames = []
         for i,f in enumerate(st_obs.exposure_fnames):
             dat = fits.open(f)
@@ -440,12 +441,12 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
             dat[1].data[dat[1].data<0] = 0
 
             dat[1].data/=scipy.ndimage.zoom(st_obs.pams[0].T,4)
+            if st_obs.detector in ["ACS","UVIS"]:
+                dat['D2IMARR',st_obs.sci_ext].data = scipy.ndimage.zoom(dat['D2IMARR',st_obs.sci_ext].data,4)
 
             dat['DQ',1].data = np.zeros((newx,newy)).astype(int)
             dat['ERR',1].data = np.ones((newx,newy))
-            print(dat)
-            dat = dat[:4]
-            print(dat)
+            #dat = dat[:4]
             dat.writeto(os.path.join(outdir,os.path.basename(f)),overwrite=True)
             out_fnames.append(os.path.join(outdir,os.path.basename(f)))
             
@@ -454,8 +455,8 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
         astrodrizzle.AstroDrizzle(','.join(out_fnames),output=os.path.join(outdir,'temp_psf'),
                             build=True,median=False,skysub=False,
                             driz_cr_corr=False,final_wht_type='ERR',driz_separate=False,
-                            driz_cr=False,blot=False,clean=True,
-                            final_outnx=int(1014*4),final_outny=int(1014*4))
+                            driz_cr=False,blot=False,clean=True,group='sci,'+str(st_obs.sci_ext),
+                            final_outnx=int(newy),final_outny=int(newx))
         
         try:
             dat = fits.open(glob.glob(os.path.join(outdir,'temp_psf_drz.fits'))[0])
@@ -467,14 +468,14 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
         level3[np.isnan(level3)] = 0 
         print(level3.shape)
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        my,mx = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
+        mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
         print(x,y,np.max(mx),np.max(my))
         level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=True, 
                                                       oversampling=4)
         
         shutil.rmtree(outdir)
-    except RuntimeError:
+    except:
         print('Failed to create PSF model')
         shutil.rmtree(outdir)
     return level3_psf
