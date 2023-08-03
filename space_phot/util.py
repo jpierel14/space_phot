@@ -212,48 +212,67 @@ def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
         psf_list.append(epsf_model)
     return psf_list
 
-def get_jwst_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
+def get_jwst_psf(st_obs,sky_location,psf_width=101,pipeline_level=2):
     inst = webbpsf.instrument(st_obs.instrument)
     inst.filter = st_obs.filter
     inst.detector=st_obs.detector
-    if st_obs.pipeline_level == 3:
-        inst.pixelscale = st_obs.pixel_scale
+    if pipeline_level == 3:
+        #inst.pixelscale = st_obs.pixel_scale
+        oversampling = 1
+    else:
+        oversampling = 4
 
-    grid = inst.psf_grid(num_psfs=num_psfs,all_detectors=False,oversample=4)
+    #grid = inst.psf_grid(num_psfs=num_psfs,all_detectors=False,oversample=4)
+    sky_location = SkyCoord(171.8173850,42.4663884,unit=u.deg)
     psf_list = []
-    grid.oversampling=1
+    #grid.oversampling=1
+    kernel = astropy.convolution.Box2DKernel(width=4)
     for i in range(st_obs.n_exposures):
 
         imwcs = st_obs.wcs_list[i]
         x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
+        inst.detector_position = (x,y)
+        #grid.x_0 = x
+        #grid.y_0 = y
+        #xf, yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
+        #                    np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
+        #psf = np.array(grid(xf,yf)).astype(float)
+        psf = inst.calc_psf(oversample=4,normalize='last')
+        # Convolve PSF with a square kernel for the detector pixel response function
+        psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
 
-        grid.x_0 = x
-        grid.y_0 = y
-        xf, yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
-                            np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
-        psf = np.array(grid(xf,yf)).astype(float)
-        
-        epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=4)
+        # Convolve PSF with a model for interpixel capacitance
+        # note, normally this is applied in calc_psf to the detector-sampled data;
+        # here we specially apply this to the oversampled data
+        #from webbpsf import detectors
+        #webbpsf.detectors.apply_detector_ipc(psf, extname=0)
+        #plt.imshow(psf[0].data)
+        #plt.show()
+        #sys.exit()
+        epsf_model = photutils.psf.FittableImageModel(psf[0].data*16,normalize=False,oversampling=oversampling)
         psf_list.append(epsf_model)
     return psf_list
 
 def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
-    #psfs = get_jwst_psf(st_obs,sky_location,num_psfs=num_psfs,psf_width=psf_width)
-    grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
-    grid.oversampling = 1 
-    psfs = []
-    for i in range(st_obs.n_exposures):
-        imwcs = st_obs.wcs_list[i]
-        x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        grid.x_0 = x
-        grid.y_0 = y
-       
-        xf, yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
-                            np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
+    psfs = get_jwst_psf(st_obs,sky_location,psf_width=psf_width,pipeline_level=3)
+    #grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
+    #grid.oversampling = 1 
+    # kernel = astropy.convolution.Box2DKernel(width=4)
+    # psfs = []
+    # for i in range(st_obs.n_exposures):
+    #     imwcs = st_obs.wcs_list[i]
+    #     x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
+    #     psf = inst.calc_psf(oversample=4,normalize='last')
+    #     psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
+    # #    grid.x_0 = x
+    # #    grid.y_0 = y
+    # #   
+    # #    xf, yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
+    # #                        np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
 
-        psf = np.array(grid(xf,yf)).astype(float)
-        epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=1)
-        psfs.append(epsf_model)
+    # #    psf = np.array(grid(xf,yf)).astype(float)
+    #     epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=1)
+    #     psfs.append(epsf_model)
 
     outdir = os.path.join(os.path.abspath(os.path.dirname(__file__)),'temp_%i'%np.random.randint(0,1000))
     os.mkdir(outdir)
@@ -351,14 +370,18 @@ def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
         imwcs = wcs.WCS(dat['SCI',1])
         level3 = dat[1].data
         level3[np.isnan(level3)] = 0 
+        level3[level3<0] = 0
         #print(np.max(level3))
         #sys.exit()
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
-        
-        level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=True, 
+        level3[mx,my]/=np.sum(level3[mx,my])
+        level3[mx,my]*=16
+        kernel = astropy.convolution.Box2DKernel(width=4)
+        level3_psf = photutils.psf.FittableImageModel(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False, 
                                                       oversampling=4)
+
         shutil.rmtree(outdir)
     except RuntimeError:
         print('Failed to create PSF model')

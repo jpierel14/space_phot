@@ -31,7 +31,10 @@ def calibrate_JWST_flux(flux,fluxerr,imwcs,flux_units=None,units = astropy.units
     mag = flux.to(astropy.units.ABmag)
     zp = mag.value+2.5*np.log10(flux.value)
     #print(mag,-2.5*np.log10(flux.value))
-    return(flux.value,fluxerr.value,mag.value,magerr,zp)
+    try:
+        return(flux.value,fluxerr.value,mag.value,magerr,float(zp))
+    except:
+        return(flux.value,fluxerr.value,mag.value,magerr,zp)
 
 def JWST_mag_to_flux(mag,imwcs,zpsys='ab',density=True):
     if zpsys=='ab':

@@ -241,7 +241,6 @@ class observation():
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         sums = [np.sum(f) for f in fluxes]
-
         def chisq_likelihood(parameters):
             total = 0
             for i in range(len(fluxes)):
@@ -355,7 +354,7 @@ class observation():
 
         vparameters, cov = nestle.mean_and_cov(res.samples, res.weights)
         #samples, weights = res.samples, res.importance_weights()
-
+        
         #vparameters, cov = dyfunc.mean_and_cov(samples, weights)
         # res = sncosmo.utils.Result(niter=res.niter,
         #                            ncall=res.ncall,
@@ -407,7 +406,6 @@ class observation():
 
         all_mflux_arr = []
         all_resid_arr = []
-        
         for i in range(len(fluxes)):
             posx = xs[i]
             posy = ys[i]
@@ -439,7 +437,6 @@ class observation():
             #mflux*=self.pams[i][posx,posy]
             resid = res.data_arr[i]-mflux
             all_resid_arr.append(resid)
-            
         res.psf_arr = all_mflux_arr
         res.resid_arr = all_resid_arr
         self.psf_result = res
@@ -541,7 +538,7 @@ class observation3(observation):
             try:
                 self.err = 1./np.sqrt(self.fits['WHT',1].data)
             except:
-                self.err = None
+                self.err = np.sqrt(self.data)
         self.prim_header = self.fits[0].header
         self.sci_header = self.fits['SCI',1].header
 
@@ -732,10 +729,10 @@ class observation3(observation):
         cutouts.append(cutout)
         if fit_flux:
             #if all_bg_est!=0:
-            f_guess = [16*np.nansum(cutout-all_bkg_est)]
+            f_guess = [np.nansum(cutout-all_bg_est)]
             #else:
             #    f_guess = [np.nansum(cutout-np.nanmedian(self.data))]
-            #pnames = ['flux']
+            pnames = ['flux']
         else:
             f_guess = []
             pnames = []
@@ -826,8 +823,8 @@ class observation3(observation):
         
             psf_arr = self.psf_model_list[i](xx,yy)#*self.pams[i]#self.psf_pams[i]
             
-            flux_sum = np.sum(psf_arr)#simple_aperture_sum(psf_arr,np.atleast_2d([y,x]),10)
-            print(np.sum(flux_sum),np.sum(self.psf_model_list[0].data)*self.psf_model_list[0].flux)
+            #flux_sum = np.sum(psf_arr)#simple_aperture_sum(psf_arr,np.atleast_2d([y,x]),10)
+            flux_sum = self.psf_result.best[self.psf_result.vparam_names.index(flux_var)]
         else:
             yf, xf = np.mgrid[-10:11,-10:11].astype(int)
             xf += int(self.psf_model_list[i].y_0+.5)
@@ -847,7 +844,6 @@ class observation3(observation):
                 flux_sum*psf_corr)**2+bk_std**2),self.wcs,flux_units=self.flux_units)
         else:
             psf_corr = 1#calc_hst_psf_corr(self.psf_model_list[i].shape[0]/2,self.detector,self.filter,[x,y],'/Users/jpierel/DataBase/HST/psfs')
-            print(flux_sum)
             flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum*psf_corr,
                 np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
                 flux_sum*psf_corr)**2+bk_std**2),self.prim_header,self.sci_header)
@@ -960,8 +956,12 @@ class observation3(observation):
                   'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
         result_cal = {'flux':[],'fluxerr':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[],'mjd':[]}
 
+
         if xy_positions is None:
-            positions = np.atleast_2d(list(zip(*astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))))
+            try:
+                positions = np.atleast_2d(list(zip(*astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))))
+            except:
+                positions = np.atleast_2d(astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))
         else:
             positions = np.atleast_2d(xy_positions)
         print(positions)
@@ -1074,14 +1074,14 @@ class observation3(observation):
             
             psf_model[j].x_0 = x
             psf_model[j].y_0 = y
-            psf_model[j].flux = 16*flux/np.sum(psf_model[j].data)#*self.exp#/psf_corr
+            psf_model[j].flux = flux/np.sum(psf_model[j].data)#*self.exp#/psf_corr
             print(j,flux,x,y)
             #psf_arr = flux*psf_model.data/astropy.nddata.extract_array(\
             #    self.pams[i],psf_model.data.shape,[x,y])
-            psf_width = 101
-            xf,yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
-                            np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
-            #yf, xf = np.mgrid[0:temp['SCI',1].data.shape[0],0:temp['SCI',1].data.shape[1]].astype(int)
+            #psf_width = 101
+            #xf,yf = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
+            #                np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
+            xf, yf = np.mgrid[0:temp['SCI',1].data.shape[0],0:temp['SCI',1].data.shape[1]].astype(int)
             psf_arr = psf_model[j](xf,yf)
             print(j,np.sum(psf_arr))
             plant_info['x'].append(x)
@@ -1199,8 +1199,11 @@ class observation2(observation):
             plant_locations = [plant_locations]
         if isinstance(magnitudes,(int,float)):
             magnitudes = [magnitudes]*len(plant_locations)
-        #if not isinstance(psf_model,list):
-        #    psf_model = [psf_model]
+        if not isinstance(psf_model,list):
+            psf_model = [psf_model]
+        assert isinstance(psf_model[0],list), "Must supply list of PSF models (for each exposure)"
+        assert len(psf_model)==len(plant_locations) and len(psf_model[0])==self.n_exposures,\
+             "Must supply same number of psfs as plant locations."
         assert len(plant_locations)==len(magnitudes), "Must supply same number of plant_locations,mags"
         #psf_corr,mod_psf = calc_jwst_psf_corr(psf_model.data.shape[0]/2,self.instrument,
         #    self.filter,self.wcs_list[0])
@@ -1208,6 +1211,7 @@ class observation2(observation):
         for i in range(self.n_exposures):
             plant_info = {key:[] for key in ['x','y','ra','dec','mag','flux']}
             temp = astropy.io.fits.open(self.exposure_fnames[i])
+            temp['SCI',1].data = np.zeros(temp['SCI',1].data.shape)
             for j in range(len(plant_locations)):
                 if isinstance(plant_locations[j],astropy.coordinates.SkyCoord):
                     y,x = astropy.wcs.utils.skycoord_to_pixel(plant_locations[j],self.wcs_list[i])
@@ -1224,21 +1228,21 @@ class observation2(observation):
                     flux = JWST_mag_to_flux(magnitudes[j],self.wcs_list[i])
                 else:
                     flux = HST_mag_to_flux(magnitudes[j],self.prim_headers[i],self.sci_headers[i])
-                psf_model[i].x_0 = x
-                psf_model[i].y_0 = y
+                psf_model[j][i].x_0 = x
+                psf_model[j][i].y_0 = y
                 
              
                 #psf_arr = flux*psf_model.data/astropy.nddata.extract_array(\
                 #    self.pams[i],psf_model.data.shape,[x,y])
                 yf, xf = np.mgrid[0:temp['SCI',1].data.shape[0],0:temp['SCI',1].data.shape[1]].astype(int)
-                psf_model[i].flux = flux/np.sum(psf_model[i](yf,xf))#/psf_corr
+                psf_model[j][i].flux = flux/np.sum(psf_model[j][i](yf,xf))#/psf_corr
                 if self.sci_headers[i]['BUNIT'] in ['ELECTRON','ELECTRONS']:
-                    psf_model[i].flux *= self.prim_headers[i]['EXPTIME']
-                
-                psf_arr = psf_model[i](yf,xf)/self.pams[i]
-                plt.imshow(psf_arr)
-                plt.show()
-                print(np.sum(psf_arr),flux)
+                    psf_model[j][i].flux *= self.prim_headers[i]['EXPTIME']
+                # print(np.sum(psf_model[j][i](yf,xf)),flux)
+                psf_arr = psf_model[j][i](yf,xf)/self.pams[i]
+                # plt.imshow(psf_arr)
+                # plt.show()
+                # print(np.sum(psf_arr),flux)
                 plant_info['x'].append(x)
                 plant_info['y'].append(y)
                 plant_info['ra'].append(ra)
@@ -1488,7 +1492,7 @@ class observation2(observation):
             
             if fit_flux!='fixed':
                 #if all_bg_est[im]!=0 or True:
-                f_guess = 16*np.nansum(cutout-all_bg_est[im])
+                f_guess = np.nansum(cutout-all_bg_est[im])
                 #else:
                 #    f_guess = np.nansum(cutout-np.nanmedian(self.data_arr_pam[im]))
                 fluxg.append(f_guess)
@@ -1661,9 +1665,9 @@ class observation2(observation):
                 flux_sum/=apcorr
 
             else:
-                yf, xf = np.mgrid[0:self.data_arr[i].shape[0],0:self.data_arr[i].shape[1]].astype(int)
-                psf_arr = self.psf_model_list[i](yf,xf)
-                flux_sum = np.sum(psf_arr)#simple_aperture_sum(psf_arr,np.atleast_2d([y,x]),10)
+                #yf, xf = np.mgrid[0:self.data_arr[i].shape[0],0:self.data_arr[i].shape[1]].astype(int)
+                #psf_arr = self.psf_model_list[i](yf,xf)
+                flux_sum = self.psf_result.best[self.psf_result.vparam_names.index(flux_var)]#np.sum(psf_arr)#simple_aperture_sum(psf_arr,np.atleast_2d([y,x]),10)
 
             if self.telescope == 'JWST':
                 #psf_corr,model_psf = calc_jwst_psf_corr(self.psf_model_list[i].shape[0]/2,self.instrument,self.filter,self.wcs_list[i],psf=model_psf)
