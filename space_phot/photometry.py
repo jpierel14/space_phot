@@ -839,13 +839,13 @@ class observation3(observation):
             # flux_sum/=apcorr
         if self.telescope == 'JWST':
             #psf_corr,model_psf = calc_jwst_psf_corr(self.psf_model_list[i].shape[0]/2,self.instrument,self.filter,self.wcs_list[i],psf=model_psf)
-            psf_corr = 1
-            flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum*psf_corr,
+            #psf_corr = 1
+            flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum,
                 np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
                 flux_sum*psf_corr)**2+bk_std**2),self.wcs,flux_units=self.flux_units)
         else:
-            psf_corr = 1#calc_hst_psf_corr(self.psf_model_list[i].shape[0]/2,self.detector,self.filter,[x,y],'/Users/jpierel/DataBase/HST/psfs')
-            flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum*psf_corr,
+
+            flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum,
                 np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
                 flux_sum*psf_corr)**2+bk_std**2),self.prim_header,self.sci_header)
 
@@ -1677,15 +1677,14 @@ class observation2(observation):
                 
 
             if self.telescope == 'JWST':
-                #psf_corr,model_psf = calc_jwst_psf_corr(self.psf_model_list[i].shape[0]/2,self.instrument,self.filter,self.wcs_list[i],psf=model_psf)
+
                 
-                flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum*psf_corr,
+                flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum,
                     np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
                     flux_sum*psf_corr)**2+bk_std**2),self.wcs_list[i])
             else:
-                psf_corr = 1#calc_hst_psf_corr(self.psf_model_list[i].shape[0]/2,self.detector,self.filter,[x,y],'/Users/jpierel/DataBase/HST/psfs')
 
-                flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum/psf_corr,
+                flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum,
                     np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
                     flux_sum*psf_corr)**2+bk_std**2),self.prim_headers[i],self.sci_headers[i])
 
