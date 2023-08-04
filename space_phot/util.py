@@ -397,6 +397,9 @@ def get_hst_psf(st_obs,sky_location,psf_width=25):
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         psfinterp = grid._calc_interpolator(int(x), int(y))
         _psf_interp = psfinterp(grid._xidx, grid._yidx)
+        _psf_interp/=simple_aperture_sum(_psf_interp,[[_psf_interp.shape[0]/2,_psf_interp.shape[0]/2]],5.6*4)
+        _psf_interp*=16
+        _psf_interp/=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.instrument))
         psfmodel = photutils.psf.FittableImageModel(_psf_interp,
                                       oversampling=grid.oversampling)
         psfmodel.x_0 = x#int(x)
@@ -488,17 +491,21 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
         imwcs = wcs.WCS(dat[1],dat)
         y,x = skycoord_to_pixel(sky_location,imwcs)
         level3 = dat[1].data
-        level3[np.isnan(level3)] = 0 
-        print(level3.shape)
+        level3[np.isnan(level3)] = 0
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
-        print(x,y,np.max(mx),np.max(my))
-        level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=True, 
+
+
+        level3[mx,my]/=simple_aperture_sum(level3[mx,my],[[4*psf_width/2,4*psf_width/2]],5.6*4)
+        level3[mx,my]*=16
+        level3[mx,my]/=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.instrument))
+        kernel = astropy.convolution.Box2DKernel(width=4)
+        level3_psf = photutils.psf.FittableImageModel(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False, 
                                                       oversampling=4)
         
         shutil.rmtree(outdir)
-    except:
+    except RuntimeError:
         print('Failed to create PSF model')
         shutil.rmtree(outdir)
     return level3_psf
