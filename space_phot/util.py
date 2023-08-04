@@ -208,7 +208,9 @@ def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
 
         psf = np.array(grid(xf,yf)).astype(float)
-        epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=4)
+        psf/=np.sum(psf)
+        psf*=16
+        epsf_model = photutils.psf.FittableImageModel(psf,normalize=False,oversampling=4)
         psf_list.append(epsf_model)
     return psf_list
 
