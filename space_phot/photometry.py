@@ -1209,8 +1209,7 @@ class observation2(observation):
         for i in range(self.n_exposures):
             plant_info = {key:[] for key in ['x','y','ra','dec','mag','flux']}
             temp = astropy.io.fits.open(self.exposure_fnames[i])
-            temp['SCI',1].data = np.zeros(temp['SCI',1].data.shape)
-            temp['DQ',1].data = np.zeros(temp['SCI',1].data.shape).astype(int)
+            
             for j in range(len(plant_locations)):
                 if isinstance(plant_locations[j],astropy.coordinates.SkyCoord):
                     y,x = astropy.wcs.utils.skycoord_to_pixel(plant_locations[j],self.wcs_list[i])
