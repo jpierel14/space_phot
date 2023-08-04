@@ -664,7 +664,7 @@ def get_standard_gdc(path, filt, det):
 
     if not os.path.exists(gdc_path):
         print('Downloading GDC File.  Size ~= 300MB, this may take a while.')
-        url = 'http://www.stsci.edu/~jayander/STDGDCs/{}/{}'.format(
+        url = 'http://www.stsci.edu/~jayander/HST1PASS/LIB/PSFs/STDPSFs/{}/{}'.format(
             detector, gdc_filename)
         urllib.request.urlretrieve(url, gdc_path)
         print('Saving GDC file to {}'.format(gdc_path))
