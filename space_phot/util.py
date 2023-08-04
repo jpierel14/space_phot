@@ -223,7 +223,7 @@ def get_jwst_psf(st_obs,sky_location,psf_width=101,pipeline_level=2):
         oversampling = 4
 
     #grid = inst.psf_grid(num_psfs=num_psfs,all_detectors=False,oversample=4)
-    sky_location = SkyCoord(171.8173850,42.4663884,unit=u.deg)
+    
     psf_list = []
     #grid.oversampling=1
     kernel = astropy.convolution.Box2DKernel(width=4)
