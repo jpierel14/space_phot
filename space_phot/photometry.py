@@ -842,12 +842,12 @@ class observation3(observation):
             #psf_corr = 1
             flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum,
                 np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
-                flux_sum*psf_corr)**2+bk_std**2),self.wcs,flux_units=self.flux_units)
+                flux_sum)**2+bk_std**2),self.wcs,flux_units=self.flux_units)
         else:
 
             flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum,
                 np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
-                flux_sum*psf_corr)**2+bk_std**2),self.prim_header,self.sci_header)
+                flux_sum)**2+bk_std**2),self.prim_header,self.sci_header)
 
         result_cal['x'].append(x)
         result_cal['y'].append(y)
@@ -1681,12 +1681,12 @@ class observation2(observation):
                 
                 flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum,
                     np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
-                    flux_sum*psf_corr)**2+bk_std**2),self.wcs_list[i])
+                    flux_sum)**2+bk_std**2),self.wcs_list[i])
             else:
 
                 flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum,
                     np.sqrt(((self.psf_result.errors[flux_var]/self.psf_result.best[self.psf_result.vparam_names.index(flux_var)])*\
-                    flux_sum*psf_corr)**2+bk_std**2),self.prim_headers[i],self.sci_headers[i])
+                    flux_sum)**2+bk_std**2),self.prim_headers[i],self.sci_headers[i])
 
             result_cal['x'].append(x)
             result_cal['y'].append(y)
