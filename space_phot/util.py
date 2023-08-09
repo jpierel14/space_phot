@@ -218,8 +218,9 @@ def get_jwst_psf(st_obs,sky_location,psf_width=101,pipeline_level=2):
     inst = webbpsf.instrument(st_obs.instrument)
     inst.filter = st_obs.filter
     inst.detector=st_obs.detector
+
     if pipeline_level == 3:
-        #inst.pixelscale = st_obs.pixel_scale
+        
         oversampling = 1
     else:
         oversampling = 4
@@ -230,7 +231,7 @@ def get_jwst_psf(st_obs,sky_location,psf_width=101,pipeline_level=2):
     #grid.oversampling=1
     kernel = astropy.convolution.Box2DKernel(width=4)
     for i in range(st_obs.n_exposures):
-
+        inst.pixelscale = st_obs.pixel_scale[i]
         imwcs = st_obs.wcs_list[i]
         x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         inst.detector_position = (x,y)
@@ -241,8 +242,12 @@ def get_jwst_psf(st_obs,sky_location,psf_width=101,pipeline_level=2):
         #psf = np.array(grid(xf,yf)).astype(float)
         psf = inst.calc_psf(oversample=4,normalize='last')
         # Convolve PSF with a square kernel for the detector pixel response function
+        #if pipeline_level==2:
         psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
-
+        try:
+            webbpsf.detectors.apply_detector_ipc(psf, extname=0)
+        except:
+            pass
         # Convolve PSF with a model for interpixel capacitance
         # note, normally this is applied in calc_psf to the detector-sampled data;
         # here we specially apply this to the oversampled data
@@ -255,8 +260,10 @@ def get_jwst_psf(st_obs,sky_location,psf_width=101,pipeline_level=2):
         psf_list.append(epsf_model)
     return psf_list
 
-def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
+def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
+    print('get psfs')
     psfs = get_jwst_psf(st_obs,sky_location,psf_width=psf_width,pipeline_level=3)
+    print('got psfs')
     #grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
     #grid.oversampling = 1 
     # kernel = astropy.convolution.Box2DKernel(width=4)
@@ -284,26 +291,27 @@ def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
         for i,f in enumerate(st_obs.exposure_fnames):
             #print(f)
             dat = fits.open(f)
-            dat['SCI',1].data[np.isnan(dat['SCI',1].data)] = 0
+            #dat['SCI',1].data[np.isnan(dat['SCI',1].data)] = 0
             #xf, yf = np.mgrid[0:dat['SCI',1].data.shape[0],0:dat['SCI',1].data.shape[1]].astype(int)
-            norm = astropy.visualization.simple_norm(dat['SCI',1].data,invalid=0,min_cut=-.15,max_cut=.3)
+            #norm = astropy.visualization.simple_norm(dat['SCI',1].data,invalid=0,min_cut=-.15,max_cut=.3)
             #print(np.max(dat['SCI',1].data))
             #plt.imshow(dat[1].data,norm=norm)
             #plt.show()
-            imwcs = wcs.WCS(dat['SCI',1])
-            y,x = skycoord_to_pixel(sky_location,imwcs)
+            #imwcs = wcs.WCS(dat['SCI',1])
+            #y_init,x_init = skycoord_to_pixel(sky_location,imwcs)
             
             #print(x,y,pixel_to_skycoord(x,y,imwcs))
             if False:
-                newx = dat[1].header['NAXIS1']*4
-                newy = dat[1].header['NAXIS2']*4
-                dat[1].header['NAXIS1'] = newx
-                dat[1].header['NAXIS2'] = newy
+                newx = psfs[i].data.shape[0]#dat[1].header['NAXIS1']*4
+                newy = psfs[i].data.shape[1]#dat[1].header['NAXIS2']*4
+                #dat[1].header['NAXIS1'] = newx
+                #dat[1].header['NAXIS2'] = newy
                 old_wcs = wcs.WCS(dat[1])
                 #print(old_wcs)
+                #new_wcs = old_wcs[::(st_obs3.pixel_scale/st_obs.pixel_scale[0]),::(st_obs3.pixel_scale/st_obs.pixel_scale[0])].to_header()
                 new_wcs = old_wcs[::.25,::.25].to_header()
                 for k in ['PC1_1', 'PC1_2','PC2_1','PC2_2']:
-                    new_wcs[k]/=4
+                    new_wcs[k]/=4#(st_obs3.pixel_scale/st_obs.pixel_scale[0])
 
 
                 for key in new_wcs.keys():
@@ -320,7 +328,10 @@ def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
                             #else:
                             #   print(key)
                             #   sys.exit()
-                dat[1].header['PIXAR_A2'] = dat[1].header['PIXAR_A2']/16
+                dat[1].header['PIXAR_A2'] = dat[1].header['PIXAR_A2']/16\
+                #dat[1].header['CRPIX1'] = 
+            #dat[1].header['PIXAR_A2'] = st_obs3.pixel_scale**2
+            #dat[1].header['PIXAR_SR'] = dat[1].header['PIXAR_SR']/(st_obs.pixel_scale[0]/st_obs3.pixel_scale)**2
             #print(newx,newy)
             #dat['SCI',1].data = np.zeros((newx,newy))
             imwcs = wcs.WCS(dat['SCI',1])
@@ -333,8 +344,19 @@ def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
             psfs[i].y_0 = y
             
         
+            #dat['SCI',1].data = psfs[i].data#
             dat['SCI',1].data = psfs[i](xf,yf)
-            dat['SCI',1].data/=st_obs.pams[i]#scipy.ndimage.zoom(st_obs.pams[i],4)
+            
+            #temp_pam = astropy.nddata.utils.extract_array(st_obs.pams[i],[int(dat['SCI',1].data.shape[0]/4)]*2,(x_init,y_init))
+            #dat['SCI',1].data/= scipy.ndimage.zoom(temp_pam,4)
+            dat['SCI',1].data /= st_obs.pams[i]
+            #bigarr = np.ones(dat['SCI',1].data.shape)
+            #bigarr = astropy.nddata.utils.add_array(bigarr,scipy.ndimage.zoom(temp_pam,4),(y,x))
+            #dat['SCI',1].data/=np.pad(,(int((dat['SCI',1].data.shape[0]-psf_width*4)/2),
+            #                                int((dat['SCI',1].data.shape[1]-psf_width*4)/2)))#st_obs.pams[i]#
+            #dat['SCI',1].data/=bigarr
+            #plt.imshow(dat['SCI',1].data)
+            #plt.show()
             #print(np.max(dat['SCI',1].data))
             #dat['SCI',1].data[dat['SCI',1].data>.005] = 10000
             #plt.imshow(dat[1].data[xf,yf],vmin=0,vmax=.005)
@@ -363,25 +385,36 @@ def get_jwst3_psf(st_obs,sky_location,num_psfs=16,psf_width=101):
         pipe3.outlier_detection.skip = True
         pipe3.skymatch.skip = True
         pipe3.source_catalog.skip = True
-        #pipe3.resample.output_shape = (newx,newy)
+        pipe3.resample.output_shape = dat[1].data.shape
         pipe3.outlier_detection.save_results = False
-        #pipe3.resample.pixel_scale = np.sqrt(dat[1].header['PIXAR_A2'])
-        #pipe3.resample.pixel_scale_ratio = .25
+        #pipe3.resample.output_shape = (dat['SCI',1].data.shape)
+        pipe3.resample.pixel_scale = st_obs.pixel_scale[0]#/4
+        #pipe3.resample.pixel_scale_ratio = st_obs3.pixel_scale/st_obs.pixel_scale[0]
         pipe3.run(os.path.join(outdir,'cal_data_asn.json'))
         dat = fits.open(os.path.join(outdir,'temp_psf_cals_i2d.fits'))
         imwcs = wcs.WCS(dat['SCI',1])
+
         level3 = dat[1].data
         level3[np.isnan(level3)] = 0 
         level3[level3<0] = 0
         #print(np.max(level3))
         #sys.exit()
+        
+        kernel = astropy.convolution.Box2DKernel(width=4)
+        level3 = astropy.convolution.convolve(level3, kernel)
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
         level3[mx,my]/=np.sum(level3[mx,my])
         level3[mx,my]*=16
-        kernel = astropy.convolution.Box2DKernel(width=4)
-        level3_psf = photutils.psf.FittableImageModel(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False, 
+        
+        #level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
+        #                                              oversampling=4)
+        
+
+        
+        
+        level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
                                                       oversampling=4)
 
         shutil.rmtree(outdir)
@@ -421,7 +454,7 @@ def get_hst_psf(st_obs,sky_location,psf_width=25):
         #psf_list.append(epsf_model)
     return psf_list
 
-def get_hst3_psf(st_obs,sky_location,psf_width=25):
+def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
     from drizzlepac import astrodrizzle
     psfs = get_hst_psf(st_obs,sky_location,psf_width=psf_width)
 
@@ -484,7 +517,7 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
                             build=True,median=False,skysub=False,
                             driz_cr_corr=False,final_wht_type='ERR',driz_separate=False,
                             driz_cr=False,blot=False,clean=True,group='sci,'+str(st_obs.sci_ext),
-                            final_outnx=int(newy),final_outny=int(newx))
+                            final_outnx=int(newy),final_outny=int(newx),final_scale=st_obs3.pixel_scale)
         
         try:
             dat = fits.open(glob.glob(os.path.join(outdir,'temp_psf_drz.fits'))[0])
@@ -502,9 +535,12 @@ def get_hst3_psf(st_obs,sky_location,psf_width=25):
         level3[mx,my]/=simple_aperture_sum(level3[mx,my],[[4*psf_width/2,4*psf_width/2]],5.6*4)
         level3[mx,my]*=16
         level3[mx,my]/=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.instrument))
-        kernel = astropy.convolution.Box2DKernel(width=4)
-        level3_psf = photutils.psf.FittableImageModel(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False, 
+
+        level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
                                                       oversampling=4)
+        #kernel = astropy.convolution.Box2DKernel(width=4)
+        #level3_psf = photutils.psf.FittableImageModel(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False, 
+        #                                              oversampling=4)
         
         shutil.rmtree(outdir)
     except RuntimeError:
