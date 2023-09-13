@@ -741,8 +741,11 @@ def get_standard_psf(path, filt, det):
         print('Downloading PSF')
 
 
-        url = 'http://www.stsci.edu/~jayander/STDPSFs/{}/{}'.format(
+        #url = 'http://www.stsci.edu/~jayander/STDPSFs/{}/{}'.format(
+        #    detector, psf_filename)
+        url = 'http://www.stsci.edu/~jayander/WFC3/{}_PSFs/STDPSF/{}'.format(
             detector, psf_filename)
+        print(url)
         urllib.request.urlretrieve(url, psf_path)
         print('Saving PSF file to {}'.format(psf_path))
 

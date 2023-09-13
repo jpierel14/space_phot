@@ -68,7 +68,10 @@ def calibrate_HST_flux(flux,fluxerr,primary_header,sci_header):
         zp = -2.5*np.log10(photflam)-5*np.log10(photplam)-2.408
 
     mag = -2.5*np.log10(flux)+zp
-    return(np.array(flux),np.array(fluxerr),np.array(mag),np.array(magerr),float(zp))
+    try:
+        return(float(flux),float(fluxerr),float(mag),float(magerr),float(zp))
+    except:
+        return(np.array(flux),np.array(fluxerr),np.array(mag),np.array(magerr),np.array(zp))
 
 def HST_mag_to_flux(mag,primary_header,sci_header,zpsys='ab'):
     instrument = primary_header['DETECTOR']

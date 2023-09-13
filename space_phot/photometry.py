@@ -7,6 +7,7 @@ import photutils
 from collections import OrderedDict
 from copy import copy,deepcopy
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import os,sys
 from stsci.skypac import pamutils
 
@@ -133,12 +134,12 @@ class observation():
             all_mflux_arr.append(mflux)
 
         #mflux*=self.pams[i][posx,posy]
-
-            try:
-                resid =self.psf_result['fit_residuals'][i].reshape((psf_width,psf_width))#fluxes[i]-mflux 
-            except:
-                resid = np.zeros((psf_width,psf_width))
-            all_resid_arr.append(resid)
+            all_resid_arr.append(all_data_arr[-1]-all_mflux_arr[-1])
+            #try:
+            #    resid = self.psf_result['fit_residuals'][i].reshape((psf_width,psf_width))#fluxes[i]-mflux 
+            #except:
+            #    resid = np.zeros((psf_width,psf_width))
+            #all_resid_arr.append(resid)
         self.psf_result['psf_arr'] = all_mflux_arr
         self.psf_result['resid_arr'] = all_resid_arr
         self.psf_result['data_arr'] = all_data_arr
@@ -243,8 +244,7 @@ class observation():
         else:
             fit_bkg = False
 
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        
 
         sums = [np.sum(f) for f in fluxes]
         def chisq_likelihood(parameters):
@@ -287,7 +287,7 @@ class observation():
                 #weights/=np.sum(weights)
                 #mflux*=self.pams[i][posx,posy]
                 if False:#1<self.psf_model_list[i].flux<3:
-                    fig,axes = plt.subplots(1,3)
+                    fig,axes = plt.subplots(1,4)
                     im0 = axes[0].imshow(fluxes[i],origin='lower',
                         #vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
                         cmap='seismic')
@@ -304,10 +304,21 @@ class observation():
                     divider = make_axes_locatable(axes[2])
                     cax = divider.append_axes('right', size='5%', pad=0.05)
                     fig.colorbar(im2, cax=cax, orientation='vertical')
+                    im3 = axes[3].imshow((fluxes[i]-mflux)**2/fluxerrs[i]**2,origin='lower',#vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[3])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im3, cax=cax, orientation='vertical')
                     #plt.imshow(fluxes[i],origin='lower')
+                    plt.tight_layout()
                     plt.show()
                     print(parameters,np.nansum((fluxes[i]-mflux)**2/fluxerrs[i]**2),
-                        np.nansum(fluxes[i]-mflux),np.nanmin((fluxes[i]-mflux)),np.nanmax((fluxes[i]-mflux)))
+                        np.nansum(fluxes[i]-mflux),np.nansum(fluxes[i]),np.nansum(mflux),
+                        np.nanmin((fluxes[i]-mflux)),np.nanmax((fluxes[i]-mflux)))
+                    #if parameters[0]>0 and parameters[0]<5:
+                    #    print(mflux)
+                    #    print(fluxes[i])
+                    #    sys.exit()
                 #plt.imshow(mflux)
                 #plt.show()
                 # print(np.sum(fluxes[i]),np.sum(mflux))
@@ -398,6 +409,7 @@ class observation():
                                    bounds=bounds,
                                    best=vparameters,
                                    data_arr = fluxes,
+                                   err_arr = fluxerrs,
                                    psf_arr = None,
                                    big_psf_arr = None,
                                    resid_arr = None,
@@ -459,8 +471,10 @@ class observation():
             print('Must fit PSF before plotting.')
             return
 
-
-        fig,axes = plt.subplots(self.n_exposures,3,figsize=(int(3*self.n_exposures),10))
+        if self.n_exposures == 1:
+            fig,axes = plt.subplots(self.n_exposures,3,figsize=(2*int(3*self.n_exposures),10))
+        else:
+            fig,axes = plt.subplots(self.n_exposures,3,figsize=(int(3*self.n_exposures),10))
         axes = np.atleast_2d(axes)
         for i in range(self.n_exposures):
             try:
@@ -471,12 +485,18 @@ class observation():
             axes[i][0].imshow(self.psf_result.data_arr[i],
                 norm=norm1)
             axes[i][0].set_title('Data')
-            axes[i][1].imshow(self.psf_result.psf_arr[i],
+            im0 = axes[i][1].imshow(self.psf_result.psf_arr[i],
                 norm=norm1)
             axes[i][1].set_title('Model')
-            axes[i][2].imshow(self.psf_result.resid_arr[i],
-                norm=norm1)
+            divider = make_axes_locatable(axes[i][1])
+            cax = divider.append_axes('right', size='5%', pad=0.05)
+            fig.colorbar(im0, cax=cax, orientation='vertical')
+
+            im1 = axes[i][2].imshow(self.psf_result.resid_arr[i])
             axes[i][2].set_title('Residual')
+            divider = make_axes_locatable(axes[i][2])
+            cax2 = divider.append_axes('right', size='5%', pad=0.05)
+            fig.colorbar(im1, cax=cax2, orientation='vertical')
             for j in range(3):
                 axes[i][j].tick_params(
                     axis='both',          # changes apply to the x-axis
@@ -580,10 +600,10 @@ class observation3(observation):
                 self.flux_units = astropy.units.Unit(self.prim_header['BUNIT'])
             except:
                 if self.telescope=='JWST':
-                    print('Cannot create flux_units from header...asuming MJy/sr')
+                    print('Cannot create flux_units from header...assuming MJy/sr')
                     self.flux_units = astropy.units.MJy/astropy.units.sr
                 else:
-                    print('Cannot create flux_units from header...asuming electrons/s')
+                    print('Cannot create flux_units from header...assuming electrons/s')
                     self.flux_units = astropy.units.electron/astropy.units.s
         try:
             self.detector = self.prim_header['DETECTOR']
@@ -625,7 +645,7 @@ class observation3(observation):
 
     def psf_photometry(self,psf_model,sky_location=None,xy_position=None,fit_width=None,background=None,
                         fit_flux=True,fit_centroid=True,fit_bkg=False,bounds={},npoints=100,use_MLE=False,
-                        maxiter=None,find_centroid=False,minVal=False,psf_method='nest'):
+                        maxiter=None,find_centroid=False,minVal=-np.inf,psf_method='nest'):
         """
         st_phot psf photometry class for level 2 data.
 
@@ -1025,15 +1045,23 @@ class observation3(observation):
                                                           self.prim_header,
                                                           self.sci_header)
             mjd = np.median([self.prim_header['EXPSTART'],self.prim_header['EXPEND']])
-        result_cal['flux'] = flux
-        result_cal['fluxerr'] = fluxerr
-        result_cal['mag'] = mag
-        result_cal['magerr'] = magerr
-        result_cal['filter'] = [self.filter]*len(mag)
-        result_cal['zp'] = [zp]*len(mag)
-        result_cal['zpsys'] = ['ab']*len(mag)
-        result_cal['exp'] = [os.path.basename(self.fname)]*len(mag)
-        result_cal['mjd'] = [mjd]*len(mag)
+        if isinstance(flux,float):
+            result_cal['flux'] = [flux]
+            result_cal['fluxerr'] = [fluxerr]
+            result_cal['mag'] = [mag]
+            result_cal['magerr'] = [magerr]
+        else:
+            result_cal['flux'] = flux
+            result_cal['fluxerr'] = fluxerr
+            result_cal['mag'] = mag
+            result_cal['magerr'] = magerr
+
+        result_cal['filter'] = [self.filter]*len(phot)
+        result_cal['zp'] = [zp]*len(phot)
+        result_cal['zpsys'] = ['ab']*len(phot)
+        result_cal['exp'] = [os.path.basename(self.fname)]*len(phot)
+        result_cal['mjd'] = [mjd]*len(phot)
+
         res = sncosmo.utils.Result(radius=radius,
                    apcorr=apcorr,
                    sky_an=sky,
@@ -1126,7 +1154,7 @@ class observation2(observation):
             self.dq_arr = [im['DQ',sci_ext].data for im in self.exposures]
         except:
             self.dq = [np.zeros(im.shape) for im in self.data_arr]
-            
+
         self.prim_headers = [im[0].header for im in self.exposures]
         self.sci_headers = [im['SCI',sci_ext].header for im in self.exposures]
         self.wcs_list = [astropy.wcs.WCS(hdr,dat) for hdr,dat in zip(self.sci_headers,self.exposures)]
@@ -1230,8 +1258,11 @@ class observation2(observation):
         for i in range(self.n_exposures):
             plant_info = {key:[] for key in ['x','y','ra','dec','mag','flux']}
             temp = astropy.io.fits.open(self.exposure_fnames[i])
-            temp['SCI',1].data = np.zeros(temp['SCI',1].data.shape)
-            temp['VAR_RNOISE',1].data = np.ones(temp['SCI',1].data.shape)
+            #temp['SCI',1].data = np.zeros(temp['SCI',1].data.shape)
+            #try:
+            #    temp['VAR_RNOISE',1].data = np.ones(temp['SCI',1].data.shape)
+            #except:
+            #    temp['ERR',1].data = np.ones(temp['SCI',1].data.shape)
             for j in range(len(plant_locations)):
                 if isinstance(plant_locations[j],astropy.coordinates.SkyCoord):
                     y,x = astropy.wcs.utils.skycoord_to_pixel(plant_locations[j],self.wcs_list[i])
@@ -1386,7 +1417,7 @@ class observation2(observation):
 
     def psf_photometry(self,psf_model,sky_location=None,xy_positions=[],fit_width=None,background=None,
                         fit_flux='single',fit_centroid='pixel',fit_bkg=False,bounds={},npoints=100,use_MLE=False,
-                        maxiter=None,find_centroid=False,minVal=False):
+                        maxiter=None,find_centroid=False,minVal=-np.inf):
         """
         st_phot psf photometry class for level 2 data.
 
