@@ -11,7 +11,7 @@ from astropy.io import fits
 from astropy.table import Table
 from photutils.aperture import CircularAnnulus, CircularAperture
 from photutils.psf import FittableImageModel
-from photutils.psf.models import GriddedPSFModel
+from photutils.psf import GriddedPSFModel
 from scipy.ndimage import convolve, maximum_filter
 from scipy.optimize import curve_fit
 from scipy.stats import sigmaclip
