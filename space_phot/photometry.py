@@ -1226,7 +1226,7 @@ class observation2(observation):
             
         return mag
 
-    def plant_psf(self,psf_model,plant_locations,magnitudes):
+    def plant_psf(self,psf_model,plant_locations,magnitudes,multi_plant=False):
         """
         PSF planting class. Output files will be the same directory
         as the data files, but with _plant.fits added the end. 
@@ -1257,7 +1257,15 @@ class observation2(observation):
         
         for i in range(self.n_exposures):
             plant_info = {key:[] for key in ['x','y','ra','dec','mag','flux']}
-            temp = astropy.io.fits.open(self.exposure_fnames[i])
+            if not multi_plant:
+                temp = astropy.io.fits.open(self.exposure_fnames[i])
+            else:
+                if os.path.exists(self.exposure_fnames[i].replace('.fits','_plant.fits')):
+                    temp = astropy.io.fits.open(self.exposure_fnames[i].replace('.fits','_plant.fits'))
+                    first_plant = False
+                else:
+                    temp = astropy.io.fits.open(self.exposure_fnames[i])
+                    first_plant = True
             #temp['SCI',1].data = np.zeros(temp['SCI',1].data.shape)
             #try:
             #    temp['VAR_RNOISE',1].data = np.ones(temp['SCI',1].data.shape)
@@ -1312,7 +1320,14 @@ class observation2(observation):
 
                 temp['SCI',1].data+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
                     #psf_arr,[x,y])
-            astropy.table.Table(plant_info).write(self.exposure_fnames[i].replace('.fits','_plant.dat'),overwrite=True,
+            if not multi_plant or first_plant:
+                astropy.table.Table(plant_info).write(self.exposure_fnames[i].replace('.fits','_plant.dat'),overwrite=True,
+                                                  format='ascii')
+            else:
+                astropy.table.vstack([astropy.table.Table(plant_info),
+                                        astropy.table.Table.read(self.exposure_fnames[i].replace('.fits','_plant.dat'),
+                                                  format='ascii')]).write(self.exposure_fnames[i].replace('.fits','_plant.dat'),
+                                                  overwrite=True,
                                                   format='ascii')
             temp.writeto(self.exposure_fnames[i].replace('.fits','_plant.fits'),overwrite=True)
 
