@@ -184,14 +184,14 @@ def mjd_dict_from_list(filelist,tolerance=0):
         mjd_dict[mjd_key].append(f)
     return mjd_dict
 
-def filter_dict_from_list(filelist,sky_location=None):
+def filter_dict_from_list(filelist,sky_location=None,ext=1):
     filt_dict = {}
     for f in filelist:
         dat = astropy.io.fits.open(f)
         if sky_location is not None:
-            imwcs = astropy.wcs.WCS(dat['SCI',1],dat)
+            imwcs = astropy.wcs.WCS(dat[ext],dat)
             y,x = skycoord_to_pixel(sky_location,imwcs)
-            if not (0<x<dat['SCI',1].data.shape[1] and 0<y<dat['SCI',1].data.shape[0]):
+            if not (0<x<dat['SCI',ext].data.shape[1] and 0<y<dat['SCI',ext].data.shape[0]):
                 continue
 
         if 'FILTER' in dat[0].header.keys():
@@ -201,8 +201,8 @@ def filter_dict_from_list(filelist,sky_location=None):
                 filt = dat[0].header['FILTER2']
             else:
                 filt = dat[0].header['FILTER1']
-        elif 'FILTER' in dat[1].header.keys():
-            filt = dat[1].header['FILTER']
+        elif 'FILTER' in dat['SCI',ext].header.keys():
+            filt = dat['SCI',ext].header['FILTER']
         else:
             print('Cannot find FILTER keyword')
             return
@@ -650,14 +650,44 @@ def jwst_apcorr(fname,ee=70,alternate_ref=None):
         fname = alternate_ref
     with datamodels.open(fname) as model:
         reffile_paths = sc._get_reffile_paths(model)
-        aperture_ee = (20,30,ee)
-        refdata = reference_data.ReferenceData(model, reffile_paths,
-                                aperture_ee)
-        aperture_params = refdata.aperture_params
-    return [aperture_params['aperture_radii'][-1], 
+        if ee==10:
+            ees = (10,20,30)
+            refdata = reference_data.ReferenceData(model, reffile_paths,
+                                ees)
+            aperture_params = refdata.aperture_params
+            return [aperture_params['aperture_radii'][0], 
+           aperture_params['aperture_corrections'][0],
+           aperture_params['bkg_aperture_inner_radius'],
+           aperture_params['bkg_aperture_outer_radius']]
+        elif ee==20:
+            ees = (10,20,30)
+            refdata = reference_data.ReferenceData(model, reffile_paths,
+                                ees)
+            aperture_params = refdata.aperture_params
+            return [aperture_params['aperture_radii'][1], 
+           aperture_params['aperture_corrections'][1],
+           aperture_params['bkg_aperture_inner_radius'],
+           aperture_params['bkg_aperture_outer_radius']]
+        elif ee==30:
+            ees = (10,20,30)
+            refdata = reference_data.ReferenceData(model, reffile_paths,
+                                ees)
+            aperture_params = refdata.aperture_params
+            return [aperture_params['aperture_radii'][2], 
+           aperture_params['aperture_corrections'][2],
+           aperture_params['bkg_aperture_inner_radius'],
+           aperture_params['bkg_aperture_outer_radius']]
+        else:
+            ees = (10,20,ee)
+            refdata = reference_data.ReferenceData(model, reffile_paths,
+                                ees)
+            aperture_params = refdata.aperture_params
+            return [aperture_params['aperture_radii'][-1], 
            aperture_params['aperture_corrections'][-1],
            aperture_params['bkg_aperture_inner_radius'],
            aperture_params['bkg_aperture_outer_radius']]
+    
+    
 
 
 def estimate_bkg(data,position,inner, outer,model_psf=None,corr=None):

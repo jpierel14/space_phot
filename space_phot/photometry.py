@@ -506,7 +506,7 @@ class observation():
                     labelbottom=False,
                     labelleft=False) # labels along the bottom edge are off
         plt.tight_layout()
-        plt.show()
+        #plt.show()
         return fig
 
     def plot_psf_posterior(self,minweight=-np.inf):
@@ -546,7 +546,7 @@ class observation():
             use_mathtext=True,
             title_kwargs={"fontsize": 11},
             label_kwargs={'fontsize': 16})
-        plt.show()
+        #plt.show()
 
 
 class observation3(observation):
