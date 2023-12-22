@@ -88,13 +88,19 @@ class observation():
         pass
     
 
-    def fast_psf(self,psf_model,centers,psf_width=5,**kwargs):
+    def fast_psf(self,psf_model,centers,psf_width=5,local_bkg=False,**kwargs):
+        if local_bkg:
+            from photutils.background import LocalBackground, MMMBackground
 
+            bkgstat = MMMBackground()
+            localbkg_estimator = LocalBackground(psf_width, psf_width*2, bkgstat)
+        else:
+            localbkg_estimator = None
         pos = astropy.table.Table(np.atleast_2d(centers),names=['y_0','x_0'])
         daofind = photutils.detection.DAOStarFinder(threshold=5,fwhm=2,xycoords=np.array([pos['x_0'],pos['y_0']]).T)
         self.psf_model_list = [psf_model]
         psfphot = photutils.psf.PSFPhotometry(self.psf_model_list[0], psf_width, finder=daofind,
-                            aperture_radius=psf_width)
+                            aperture_radius=psf_width,localbkg_estimator=localbkg_estimator)
 
         if self.pipeline_level==3:
             phot = psfphot(self.data, error=self.err,init_params=pos)
@@ -123,10 +129,15 @@ class observation():
             slc_lg, _ = astropy.nddata.overlap_slices(self.data.shape, [psf_width,psf_width],  
                                        [phot[i]['y_fit'],phot[i]['x_fit']], mode='trim')
             yy, xx = np.mgrid[slc_lg]
-            all_data_arr.append(self.data[yy,xx])
+            if 'local_bkg' in phot[i].keys():
+                bkg = np.ones(self.data[yy,xx].shape)*phot[i]['local_bkg']
+            else:
+                bkg = np.zeros(self.data[yy,xx].shape)
+            all_data_arr.append(self.data[yy,xx]-bkg)
             self.psf_model_list[0].x_0 = phot[i]['x_fit']
             self.psf_model_list[0].y_0 = phot[i]['y_fit']
             self.psf_model_list[0].flux = phot[i]['flux_fit']
+
         #self.psf_result['best'] = [phot[i]['x_fit'],phot[i]['y_fit'],phot[i]['flux_fit']]
         #self.psf_result['errors'] = {vparam_names[j]:psfphot.fit_results['fit_param_errs'][i][j] for j in range(npar)} #np.sqrt(psfphot.fit_results['fit_infos'][i]['param_cov'][j][j])
             mflux = self.psf_model_list[0](xx,yy)
@@ -460,7 +471,7 @@ class observation():
         self.psf_result = res
         return
 
-    def plot_psf_fit(self):
+    def plot_psf_fit(self,fast_n=0):
         """
         Plot the best-fit PSF model and residuals
         """
@@ -477,22 +488,26 @@ class observation():
             fig,axes = plt.subplots(self.n_exposures,3,figsize=(int(3*self.n_exposures),10))
         axes = np.atleast_2d(axes)
         for i in range(self.n_exposures):
+            if fast_n!=0:
+                d_i = fast_n
+            else:
+                d_i = i
             try:
-                norm1 = astropy.visualization.simple_norm(self.psf_result.data_arr[i],stretch='linear',
+                norm1 = astropy.visualization.simple_norm(self.psf_result.data_arr[d_i],stretch='linear',
                     invalid=0)
             except:
                 norm1 = None
-            axes[i][0].imshow(self.psf_result.data_arr[i],
+            axes[i][0].imshow(self.psf_result.data_arr[d_i],
                 norm=norm1)
             axes[i][0].set_title('Data')
-            im0 = axes[i][1].imshow(self.psf_result.psf_arr[i],
+            im0 = axes[i][1].imshow(self.psf_result.psf_arr[d_i],
                 norm=norm1)
             axes[i][1].set_title('Model')
             divider = make_axes_locatable(axes[i][1])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im0, cax=cax, orientation='vertical')
 
-            im1 = axes[i][2].imshow(self.psf_result.resid_arr[i])
+            im1 = axes[i][2].imshow(self.psf_result.resid_arr[d_i])
             axes[i][2].set_title('Residual')
             divider = make_axes_locatable(axes[i][2])
             cax2 = divider.append_axes('right', size='5%', pad=0.05)
@@ -1000,7 +1015,6 @@ class observation3(observation):
                 positions = np.atleast_2d(astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))
         else:
             positions = np.atleast_2d(xy_positions)
-        print(positions)
         if self.telescope=='JWST':
             radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.fname,encircled_energy,
                 alternate_ref=alternate_ref)

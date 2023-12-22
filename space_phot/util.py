@@ -226,7 +226,7 @@ def get_jwst_psf_grid(st_obs,num_psfs=16,fname=None):
 
 def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
 
-    grid.oversampling = 1
+    grid.oversampling = (1,1)
     psf_list = []
     for i in range(st_obs.n_exposures):
         imwcs = st_obs.wcs_list[i]
@@ -466,6 +466,11 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
         print('Failed to create PSF model')
         shutil.rmtree(outdir)
     return level3_psf
+
+def get_hst_psf_grid(st_obs):
+    grid = make_models(get_standard_psf(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+            'wfc3_photometry/psfs'),st_obs.filter,st_obs.detector))[0]
+    return grid
 
 def get_hst_psf(st_obs,sky_location,psf_width=25,pipeline_level=2):
     grid = make_models(get_standard_psf(os.path.join(os.path.abspath(os.path.dirname(__file__)),
