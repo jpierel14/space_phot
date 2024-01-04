@@ -16,7 +16,7 @@ if sys.version_info < (3, 0):
 
 AUTHOR = 'Justin Pierel'
 AUTHOR_EMAIL = 'jpierel@stsci.edu'
-VERSION = '0.1.7'
+VERSION = '0.1.8'
 LICENSE = 'BSD'
 URL = ''
 
@@ -43,7 +43,7 @@ setup(
     name=PACKAGENAME,
     setup_requires=['numpy'],
     install_requires=['numpy', 'astropy','jwst','sncosmo','webbpsf==1.2.1','corner','nestle',
-                        'stsci.skypac','photutils>=1.9','pytest','drizzlepac'],
+                        'stsci.skypac','photutils>=1.9','pytest','drizzlepac','stdatamodels'],
     packages=[PACKAGENAME],
     package_data={PACKAGENAME: data_files},
 
