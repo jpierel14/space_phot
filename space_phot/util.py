@@ -44,7 +44,8 @@ __all__ = ['get_jwst_psf','get_hst_psf','get_jwst3_psf','get_hst3_psf','get_jwst
 def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13,
                                 bkg_mode='polynomial',combine_fits=True,do_fit=True,
                                 degree=2,h_wht_s = 1,v_wht_s=1,h_wht_p=1,v_wht_p=1,
-                                show_plot=False,minval=-np.inf,fudge_center=False,
+                                show_plot=False,minval=-np.inf,fudge_center_pre=False,
+                                fudge_center_post=False,
                                 finalmin=-np.inf):
     assert sky_locations is not None or pixel_locations is not None, "Must give skycoord or pixel."
     sys.path.append('/Users/jpierel/CodeBase/manuscript_jupyter/pearls_sn/background_sub')
@@ -96,7 +97,7 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
 
         cutout[cutout<minval] = np.nan
 
-        if fudge_center:
+        if fudge_center_pre:
             init_center = int((width-1)/2)
             #plt.imshow(cutout)
             #plt.show()
@@ -117,11 +118,7 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
         
 
             
-        if show_plot:
-            norm = astropy.visualization.simple_norm(cutout[1:-1,1:-1],invalid=0)
-            fig, axes = plt.subplots(1,4,figsize=(12,5))
-            axes[0].set_title('image')
-            axes[0].imshow(cutout[1:-1,1:-1],origin='lower',norm=norm,cmap='viridis')
+        
         
         # run interpolation
         if not do_fit:
@@ -130,12 +127,44 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
         else:
             (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
             nests.append(result_nest)
+
+        if fudge_center_post:
+            width-=2
+            nests = nests[:-1]
+            final_pixels = final_pixels[:-1]
+            init_center = int((width-1)/2)
+
+            maxcell = np.argmax(diff[0][init_center-1:init_center+2,init_center-1:init_center+2])
+            max_ind = np.unravel_index(maxcell,(3,3))
+
+            x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
+            width+=2
+
+            if st_obs.n_exposures==1:
+                cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+                                        x-int((width-1)/2):x+int((width-1)/2)+1]
+            else:
+                cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
+                                        x-int((width-1)/2):x+int((width-1)/2)+1]
+            final_pixels.append([y,x])
+            if not do_fit:
+                diff, bkg, mask = mbi.run(cutout)
+                
+            else:
+                (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
+                nests.append(result_nest)
+        width-=2
+        if show_plot:
+            norm = astropy.visualization.simple_norm(cutout[1:-1,1:-1],invalid=0)
+            fig, axes = plt.subplots(1,4,figsize=(12,5))
+            axes[0].set_title('image')
+            axes[0].imshow(cutout[1:-1,1:-1],origin='lower',norm=norm,cmap='viridis')
         #print(np.nanmedian(diff[0]))
         #print(np.nanmedian(bkg[0]))
         #print(np.nanmedian(mask[0]))
         #print()
         #print()
-        width-=2
+
         for n in range(int((width-1)/2)-1,int((width-1)/2)+2):
             for j in range(int((width-1)/2)-1,int((width-1)/2)+2):
                 if diff[0][n][j]<finalmin:
@@ -168,6 +197,7 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
             fig.colorbar(im2, cax=cax2, orientation='vertical')
             plt.show()
     st_obs.fancy_background_centers = final_pixels
+    st_obs.fancy_bkg_diff = mask[0]-bkg[0]
     return st_obs,nests,mbi
 
 def mjd_dict_from_list(filelist,tolerance=0):
@@ -286,9 +316,8 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None):
     return psf_list
 
 def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
-    print('get psfs')
     psfs = get_jwst_psf(st_obs,sky_location,psf_width=psf_width,pipeline_level=3)
-    print('got psfs')
+
     #grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
     #grid.oversampling = 1 
     # kernel = astropy.convolution.Box2DKernel(width=4)
@@ -583,7 +612,6 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
                 dat['ERR',st_obs.sci_ext].data = np.ones((newx,newy))
                 #dat = dat[:4]
                 level2_sums.append(simple_aperture_sum(dat['SCI',st_obs.sci_ext].data,[[y,x]],5.6*4))
-                print(level2_sums)
             
                 dat.writeto(os.path.join(outdir,os.path.basename(f)),overwrite=True)
                 out_fnames.append(os.path.join(outdir,os.path.basename(f)))
@@ -607,7 +635,6 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         level3[np.isnan(level3)] = 0
         level3[level3<0] = 0
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        print('width',psf_width)
         mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
 
@@ -620,19 +647,12 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
 
         level3_sum = simple_aperture_sum(level3,[y,x],5.6*4)
 
-        print(np.median(level2_sums),simple_aperture_sum(level3[mx,my],[[level3[mx,my].shape[0]/2,
-                                            level3[mx,my].shape[1]/2]],5.6*4),
-            simple_aperture_sum(level3,[y,x],5.6*4)
-        )
         
         level3[mx,my]/=level3_sum
         #level3[mx,my]*=np.median(level2_sums)
-        print(np.median(level2_sums),simple_aperture_sum(level3[mx,my],[[level3[mx,my].shape[0]/2,
-                                            level3[mx,my].shape[1]/2]],5.6*4))
+        
         level3[mx,my]*=16
         level3[mx,my]*=(hst_apcorr(5.6*st_obs3.px_scale,st_obs3.filter,st_obs3.instrument))
-        print(np.median(level2_sums),simple_aperture_sum(level3[mx,my],[[level3[mx,my].shape[0]/2,
-                                            level3[mx,my].shape[1]/2]],5.6*4))
         #level3[mx,my]*=(np.median(level2_sums)/simple_aperture_sum(level3[mx,my],[[level3[mx,my].shape[0]/2,
         #                                    level3[mx,my].shape[1]/2]],5.6*4))
         #level3[mx,my]*=16
@@ -762,14 +782,12 @@ def jwst_aperture_phot(fname,ra,dec,
         radius,apcorr,skyan_in,skyan_out = ee,1,ee+1,ee+3
     #radius =1.8335238
     #apcorr = aper_func(radius)
-    print(filt,radius,apcorr)
     #radius,apcorr = 1.83,1
     image = fits.open(fname)
     
     data = image['SCI',1].data#*image['AREA',1].data
     err = image['ERR',1].data
     imwcs = wcs.WCS(image[1])
-    print(astropy.wcs.utils.skycoord_to_pixel(SkyCoord(ra, dec,unit=unit),imwcs))
     #positions = np.atleast_2d(np.flip([582.80256776,819.78997553]))#
     positions = np.atleast_2d(astropy.wcs.utils.skycoord_to_pixel(SkyCoord(ra, dec,unit=unit),imwcs))
     
@@ -869,7 +887,6 @@ def hst_aperture_phot(fname,force_ra,force_dec,filt,radius=3,
     
     apcorr = hst_get_ee_corr(radius*px_scale,filt,inst)
     if inst=='ir':
-        print(apcorr)
         ee_corr = 2.5*np.log10(apcorr)
         zp = hst_get_zp(filt,'ab')
         phot['aper_sum_corrected'] = phot['aper_sum_bkgsub']/apcorr

@@ -1064,14 +1064,15 @@ class observation3(observation):
             result_cal['fluxerr'] = [fluxerr]
             result_cal['mag'] = [mag]
             result_cal['magerr'] = [magerr]
+            result_cal['zp'] = [zp]
         else:
             result_cal['flux'] = flux
             result_cal['fluxerr'] = fluxerr
             result_cal['mag'] = mag
             result_cal['magerr'] = magerr
+            result_cal['zp'] = zp
 
         result_cal['filter'] = [self.filter]*len(phot)
-        result_cal['zp'] = [zp]*len(phot)
         result_cal['zpsys'] = ['ab']*len(phot)
         result_cal['exp'] = [os.path.basename(self.fname)]*len(phot)
         result_cal['mjd'] = [mjd]*len(phot)
