@@ -1,0 +1,35 @@
+on: push
+4jobs:
+5  build-and-publish:
+6    name: Build and publish Python 🐍 distributions 📦 to PyPI
+7    runs-on: ubuntu-latest
+8    steps:
+9      - name: Check out repository code
+10        uses: actions/checkout@v2
+11
+12      # Setup Python (faster than using Python container)
+13      - name: Setup Python
+14        uses: actions/setup-python@v2
+15        with:
+16          python-version: "3.x"
+17
+18      - name: Install pipenv
+19        run: |
+20          python -m pip install --upgrade pipenv wheel
+21      - id: cache-pipenv
+22        uses: actions/cache@v1
+23        with:
+24          path: ~/.local/share/virtualenvs
+25          key: ${{ runner.os }}-pipenv-${{ hashFiles('**/Pipfile.lock') }}
+26
+27      - name: Install dependencies
+28        if: steps.cache-pipenv.outputs.cache-hit != 'true'
+29        run: |
+30          pipenv install --deploy --dev
+31      - name: Build a binary wheel and a source tarball
+32        run: |
+33          pipenv run build
+34      - name: Publish distribution 📦 to PyPI
+35        uses: pypa/gh-action-pypi-publish@master
+36        with:
+37          password: ${{ secrets.PYPI_API_TOKEN }}
