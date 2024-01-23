@@ -451,10 +451,13 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
         pipe3.resample.pixel_scale = st_obs3.pixel_scale#[0]#/4
         #pipe3.resample.pixel_scale_ratio = st_obs3.pixel_scale/st_obs.pixel_scale[0]
         pipe3.run(os.path.join(outdir,'cal_data_asn.json'))
-        dat = fits.open(os.path.join(outdir,'temp_psf_cals_i2d.fits'))
-        imwcs = wcs.WCS(dat['SCI',1])
 
-        level3 = dat[1].data
+        #imwcs = None
+        #level3 = None
+        with fits.open(os.path.join(outdir,'temp_psf_cals_i2d.fits')) as dat:
+            imwcs = wcs.WCS(dat['SCI',1])
+            level3 = dat[1].data
+
         level3[np.isnan(level3)] = 0 
         level3[level3<0] = 0
         #print(np.max(level3))
@@ -490,10 +493,11 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
         level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
                                                       oversampling=4)
 
-        shutil.rmtree(outdir)
+        shutil.rmtree(outdir, ignore_errors=True)
+        #os.rmdir(outdir)
     except RuntimeError:
         print('Failed to create PSF model')
-        shutil.rmtree(outdir)
+        shutil.rmtree(outdir, ignore_errors=True)
     return level3_psf
 
 def get_hst_psf_grid(st_obs):

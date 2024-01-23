@@ -373,11 +373,12 @@ class observation():
         #args = self.psf_model_list,self.wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,[bounds[p] for p in vparam_names],multi_flux,fit_radec,fit_pixel
         #sampler = do_nest(args)
         
-
+        
         res = nestle.sample(loglike, prior_transform, ndim, npdim=npdim,
                           npoints=npoints, method=method, maxiter=maxiter,
                           maxcall=maxcall, rstate=rstate,
                           callback=(nestle.print_progress if verbose else None))
+        
         #res = sampler.results
 
         vparameters, cov = nestle.mean_and_cov(res.samples, res.weights)
@@ -469,6 +470,7 @@ class observation():
         res.psf_arr = all_mflux_arr
         res.resid_arr = all_resid_arr
         self.psf_result = res
+        
         return
 
     def plot_psf_fit(self,fast_n=0):
@@ -572,6 +574,8 @@ class observation3(observation):
         self.pipeline_level = 3
         self.fname = fname
         self.fits = astropy.io.fits.open(self.fname)
+        
+
         self.data = self.fits['SCI',1].data
 
         try:            
@@ -628,6 +632,8 @@ class observation3(observation):
             self.detector = None
         self.px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs)[0] *\
                                                     self.wcs.wcs.cunit[0].to('arcsec')
+
+        self.fits.close()
         #if self.telescope=='JWST':
         #    self.epadu = self.sci_header['XPOSURE']*self.sci_header['PHOTMJSR']
         #else:
@@ -703,6 +709,7 @@ class observation3(observation):
         find_centroid : bool
             If True, then tries to find the centroid around your chosen location.
         """
+
         assert sky_location is not None or xy_position is not None,\
         "Must supply sky_location or xy_positions for every exposure"
 
@@ -1215,7 +1222,8 @@ class observation2(observation):
         self.px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs_list[0])[0] *\
                                                     self.wcs_list[0].wcs.cunit[0].to('arcsec')
 
-
+        for i in range(self.n_exposures):
+            self.exposures[i].close()
 
     def upper_limit(self,nsigma=3,method='psf'):
         if method.lower()=='psf':

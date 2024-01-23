@@ -16,7 +16,7 @@ if sys.version_info < (3, 0):
 
 AUTHOR = 'Justin Pierel'
 AUTHOR_EMAIL = 'jpierel@stsci.edu'
-VERSION = '0.1.8'
+VERSION = '0.2.0'
 LICENSE = 'BSD'
 URL = ''
 
