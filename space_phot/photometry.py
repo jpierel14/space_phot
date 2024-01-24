@@ -470,7 +470,7 @@ class observation():
         res.psf_arr = all_mflux_arr
         res.resid_arr = all_resid_arr
         self.psf_result = res
-        
+
         return
 
     def plot_psf_fit(self,fast_n=0):
@@ -1072,18 +1072,22 @@ class observation3(observation):
             result_cal['mag'] = [mag]
             result_cal['magerr'] = [magerr]
             result_cal['zp'] = [zp]
+
         else:
             result_cal['flux'] = flux
             result_cal['fluxerr'] = fluxerr
             result_cal['mag'] = mag
             result_cal['magerr'] = magerr
-            result_cal['zp'] = zp
+            if isinstance(zp,float):
+                result_cal['zp'] = [zp]
+            else:
+                result_cal['zp'] = zp
 
         result_cal['filter'] = [self.filter]*len(phot)
         result_cal['zpsys'] = ['ab']*len(phot)
         result_cal['exp'] = [os.path.basename(self.fname)]*len(phot)
         result_cal['mjd'] = [mjd]*len(phot)
-
+        
         res = sncosmo.utils.Result(radius=radius,
                    apcorr=apcorr,
                    sky_an=sky,
