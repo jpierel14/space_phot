@@ -337,8 +337,12 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
     #     epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=1)
     #     psfs.append(epsf_model)
 
-    outdir = os.path.join(os.path.abspath(os.path.dirname(__file__)),'temp_%i'%np.random.randint(0,1000))
-    os.mkdir(outdir)
+    outdir = os.path.join(os.path.abspath(os.path.dirname(__file__)),'temp_psf_dir')#%np.random.randint(0,1000))
+    try:
+        os.mkdir(outdir)
+    except:
+        shutil.rmtree(outdir,ignore_errors=True)
+        os.mkdir(outdir)
     #print(outdir)
     level2_sums = []
     try:
@@ -495,9 +499,11 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
 
         shutil.rmtree(outdir, ignore_errors=True)
         #os.rmdir(outdir)
-    except RuntimeError:
+    except RuntimeError as e:
         print('Failed to create PSF model')
         shutil.rmtree(outdir, ignore_errors=True)
+        print(e)
+        sys.exit()
     return level3_psf
 
 def get_hst_psf_grid(st_obs):
