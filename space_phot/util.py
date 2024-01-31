@@ -315,7 +315,7 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None):
         psf_list.append(epsf_model)
     return psf_list
 
-def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
+def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_outdir='.'):
     psfs = get_jwst_psf(st_obs,sky_location,psf_width=psf_width,pipeline_level=3)
 
     #grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
@@ -337,12 +337,10 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
     #     epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=1)
     #     psfs.append(epsf_model)
 
-    outdir = os.path.join(os.path.abspath(os.path.dirname(__file__)),'temp_psf_dir')#%np.random.randint(0,1000))
-    try:
+    outdir = os.path.join(temp_outdir,'temp_psf_dir')#%np.random.randint(0,1000))
+    if not os.path.exists(outdir):
         os.mkdir(outdir)
-    except:
-        shutil.rmtree(outdir,ignore_errors=True)
-        os.mkdir(outdir)
+    
     #print(outdir)
     level2_sums = []
     try:
@@ -496,14 +494,17 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101):
         
         level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
                                                       oversampling=4)
-
+        temp_fnames = glob.glob(os.path.join(outdir,'*'))
+        for f in temp_fnames:
+            os.remove(f)
         shutil.rmtree(outdir, ignore_errors=True)
         #os.rmdir(outdir)
-    except RuntimeError as e:
+    except:
         print('Failed to create PSF model')
+        temp_fnames = glob.glob(os.path.join(outdir,'*'))
+        for f in temp_fnames:
+            os.remove(f)
         shutil.rmtree(outdir, ignore_errors=True)
-        print(e)
-        sys.exit()
     return level3_psf
 
 def get_hst_psf_grid(st_obs):
