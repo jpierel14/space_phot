@@ -432,7 +432,8 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
             dat['VAR_FLAT',1].data = np.ones((1,1))
             dat['DQ',1].data = np.zeros(dat[1].data.shape)
             dat.writeto(os.path.join(outdir,os.path.basename(f)),overwrite=True)
-            out_fnames.append(os.path.join(outdir,os.path.basename(f)))
+            #out_fnames.append(os.path.join(outdir,os.path.basename(f)))
+            out_fnames.append(os.path.basename(f))
         #sys.exit()
         asn = asn_from_list.asn_from_list(out_fnames, rule=DMS_Level3_Base, 
             product_name='temp_psf_cals')

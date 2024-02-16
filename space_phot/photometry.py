@@ -268,6 +268,8 @@ class observation():
                     self.psf_model_list[i].flux = parameters[vparam_names.index('flux%i'%i)]
                 else:
                     self.psf_model_list[i].flux = parameters[vparam_names.index('flux')]
+                    
+
 
                 if fit_radec:
                     sky_location = astropy.coordinates.SkyCoord(parameters[vparam_names.index('ra')],
@@ -1719,8 +1721,8 @@ class observation2(observation):
                 raerr = np.abs(sc2.ra.value-ra)
                 decerr = np.abs(sc2.dec.value-dec)
             else:
-                x = self.psf_model_list[i].x_0
-                y = self.psf_model_list[i].y_0
+                x = self.psf_model_list[i].x_0.value
+                y = self.psf_model_list[i].y_0.value
                 #xerr = self.psf_result.errors['x%i'%i]
                 #yerr = self.psf_result.errors['y%i'%i]
                 sc = astropy.wcs.utils.pixel_to_skycoord(y,x,self.wcs_list[i])
