@@ -241,11 +241,70 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
         filt_dict[filt].append(f)
     return filt_dict
 
-def get_jwst_psf_grid(st_obs,num_psfs=16,fname=None):
-    if fname is None:
-        inst = webbpsf.setup_sim_to_match_file(st_obs.exposure_fnames[0])
+def webbpsf_setup_sim_to_match_file(filename_or_HDUList, verbose=True, plot=False,dateobs=None):
+    """ Setup a webbpsf Instrument instance matched to a given 
+    """
+    if isinstance(filename_or_HDUList,str):
+        if verbose:
+            print(f"Setting up sim to match {filename_or_HDUList}")
+        header = fits.getheader(filename_or_HDUList)
     else:
-        inst = webbpsf.setup_sim_to_match_file(fname)
+        header = filename_or_HDUList[0].header
+        if verbose:
+            print(f"Setting up sim to match provided FITS HDUList object")
+
+    inst = webbpsf.instrument(header['INSTRUME'])
+
+    if inst.name=='MIRI' and header['FILTER']=='P750L':
+        # webbpsf doesn't model the MIRI LRS prism spectral response
+        print("Please note, webbpsf does not currently model the LRS spectral response. Setting filter to F770W instead.")
+        inst.filter='F770W'
+    else:
+        inst.filter=header['filter']
+    inst.set_position_from_aperture_name(header['APERNAME'])
+
+    if dateobs is None:
+        dateobs = astropy.time.Time(header['DATE-OBS']+"T"+header['TIME-OBS'])
+    inst.load_wss_opd_by_date(dateobs, verbose=verbose, plot=plot)
+
+
+    # per-instrument specializations
+    if inst.name == 'NIRCam':
+        if header['PUPIL'].startswith('MASK'):
+            inst.pupil_mask = header['PUPIL']
+            inst.image_mask = header['CORONMSK'].replace('MASKA', 'MASK')  # note, have to modify the value slightly for
+                                                                           # consistency with the labels used in webbpsf
+    elif inst.name == 'MIRI':
+        if inst.filter in ['F1065C', 'F1140C', 'F1550C']:
+            inst.image_mask = 'FQPM'+inst.filter[1:5]
+        elif inst.filter == 'F2300C':
+            inst.image_mask = 'LYOT2300'
+        elif header['FILTER'] == 'P750L':
+            inst.pupil_mask = 'P750L'
+            if header['APERNAME'] == 'MIRIM_SLIT':
+                inst.image_mask = 'LRS slit'
+
+    # TODO add other per-instrument keyword checks
+
+    if verbose:
+        print(f"""
+Configured simulation instrument for:
+    Instrument: {inst.name}
+    Filter: {inst.filter}
+    Detector: {inst.detector}
+    Apername: {inst.aperturename}
+    Det. Pos.: {inst.detector_position} {'in subarray' if "FULL" not in inst.aperturename else ""}
+    Image plane mask: {inst.image_mask}
+    Pupil plane mask: {inst.pupil_mask}
+    """)
+
+    return inst
+
+def get_jwst_psf_grid(st_obs,num_psfs=16,fname=None,dateobs=None):
+    if fname is None:
+        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs)
+    else:
+        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs)
 
     c = webbpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = num_psfs,
                                                                         detectors=st_obs.detector)
@@ -274,15 +333,15 @@ def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
         psf_list.append(epsf_model)
     return psf_list
 
-def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None):
+def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,dateobs=None):
     
     #inst = webbpsf.instrument(st_obs.instrument)
     #inst.filter = st_obs.filter
     #inst.detector=st_obs.detector
     if fname is None:
-        inst = webbpsf.setup_sim_to_match_file(st_obs.exposure_fnames[0])
+        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs)
     else:
-        inst = webbpsf.setup_sim_to_match_file(fname)
+        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs)
 
     if pipeline_level == 3:
         
@@ -305,7 +364,7 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None):
                                                                         detectors=st_obs.detector,save=False)
         #psf = inst.calc_psf(oversample=4,normalize='last')
         grid = c.create_grid()
-
+        
         #psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
         #webbpsf.detectors.apply_detector_ipc(psf, extname=0)
        
