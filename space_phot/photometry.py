@@ -159,8 +159,8 @@ class observation():
             flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(phot['flux_fit'],phot['flux_err'],self.wcs)
         else:
             flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(phot['flux_fit'],phot['flux_err'],self.prim_header,self.sci_header)
-        phot['flux_cal'] = flux
-        phot['fluxerr_cal'] = fluxerr
+        phot['flux'] = flux
+        phot['fluxerr'] = fluxerr
         phot['mag'] = mag
         phot['magerr'] = magerr
         phot['zp'] = zp
@@ -1446,8 +1446,8 @@ class observation2(observation):
                 result_cal['mjd'].append(self.prim_headers[i]['MJD-AVG'])
             except:
                 result_cal['mjd'].append(self.prim_headers[i]['EXPSTART'])
-            result_cal['flux_cal'].append(flux)
-            result_cal['flux_cal_err'].append(fluxerr)
+            result_cal['flux'].append(flux)
+            result_cal['fluxerr'].append(fluxerr)
             result_cal['mag'].append(mag)
             result_cal['magerr'].append(magerr)
             result_cal['filter'].append(self.filter)
