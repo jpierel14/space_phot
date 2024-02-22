@@ -1395,7 +1395,7 @@ class observation2(observation):
 
         result = {'pos_x':[],'pos_y':[],'aper_bkg':[],'aperture_sum':[],'aperture_sum_err':[],
                   'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
-        result_cal = {'flux_cal':[],'flux_cal_err':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[]}
+        result_cal = {'flux':[],'fluxerr':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[],'mjd':[]}
         for i in range(self.n_exposures):
             if xy_positions is None:
                 positions = np.atleast_2d(astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[i]))
@@ -1442,6 +1442,10 @@ class observation2(observation):
                                                               result['aperture_sum_err'][-1],
                                                               self.prim_headers[i],
                                                               self.sci_headers[i])
+            try:
+                result_cal['mjd'].append(self.prim_headers[i]['MJD-AVG'])
+            except:
+                result_cal['mjd'].append(self.prim_headers[i]['EXPSTART'])
             result_cal['flux_cal'].append(flux)
             result_cal['flux_cal_err'].append(fluxerr)
             result_cal['mag'].append(mag)
@@ -1450,6 +1454,7 @@ class observation2(observation):
             result_cal['zp'].append(zp)
             result_cal['zpsys'].append('ab')
             result_cal['exp'].append(os.path.basename(self.exposure_fnames[i]))
+
 
         res = sncosmo.utils.Result(radius=radius,
                    apcorr=apcorr,
