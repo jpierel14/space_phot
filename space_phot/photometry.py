@@ -1029,7 +1029,7 @@ class observation3(observation):
                 radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.fname,encircled_energy,
                     alternate_ref=alternate_ref)
             else:
-                apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.fname,radius,
+                encircled_energy,apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.fname,radius,
                     alternate_ref=alternate_ref)
             epadu = self.sci_header['XPOSURE']*self.sci_header['PHOTMJSR']
 
@@ -1096,6 +1096,7 @@ class observation3(observation):
         result_cal['mjd'] = [mjd]*len(phot)
         
         res = sncosmo.utils.Result(radius=radius,
+                   ee=encircled_energy,
                    apcorr=apcorr,
                    sky_an=sky,
                    phot_table=astropy.table.Table(result),
@@ -1411,7 +1412,7 @@ class observation2(observation):
                 if encircled_energy is not None:
                     radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.exposure_fnames[i],encircled_energy)
                 else:
-                    apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.exposure_fnames[i],radius)
+                    encircled_energy,apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.exposure_fnames[i],radius)
                 
                 epadu = self.sci_headers[i]['XPOSURE']*self.sci_headers[i]['PHOTMJSR']
             else:
@@ -1467,6 +1468,7 @@ class observation2(observation):
 
 
         res = sncosmo.utils.Result(radius=radius,
+                   ee=encircled_energy,
                    apcorr=apcorr,
                    sky_an=sky,
                    phot_table=astropy.table.Table(result),

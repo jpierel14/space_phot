@@ -755,20 +755,31 @@ def jwst_apcorr_interp(fname,radius,alternate_ref=None):
     with datamodels.open(fname) as model:
         reffile_paths = sc._get_reffile_paths(model)
         for ees in [(10,20,30),(40,50,60),(70,80,90)]:
-            all_ees = np.append(all_ees,ees)
+            
             refdata = reference_data.ReferenceData(model, reffile_paths,
                             ees)
-            aperture_params = refdata.aperture_params
+            try:
+                aperture_params = refdata.aperture_params
+                all_ees = np.append(all_ees,ees)
+            except:
+                if ees[0]==10:
+                    tempees = ees[1:]+[40]
+                    refdata = reference_data.ReferenceData(model, reffile_paths,
+                            tempees)
+                    aperture_params = refdata.aperture_params
+                    all_ees = np.append(all_ees,ees[1:])
+
             all_radius = np.append(all_radius,aperture_params['aperture_radii'])
             all_corr = np.append(all_corr,aperture_params['aperture_corrections'])
-    
+
     if radius>np.max(all_radius):
         print('Your radius is larger than the largest allowed radius of %f pixels'%np.max(all_radius))
         return
     
     apcorr = scipy.interpolate.interp1d(all_radius,all_corr)(radius)
+    ee_interp = scipy.interpolate.interp1d(all_radius,all_ees)(radius)
     
-    return apcorr, aperture_params['bkg_aperture_inner_radius'], aperture_params['bkg_aperture_outer_radius']
+    return float(ee_interp), apcorr, aperture_params['bkg_aperture_inner_radius'], aperture_params['bkg_aperture_outer_radius']
 
 def jwst_apcorr(fname,ee=70,alternate_ref=None):
     sc = source_catalog.source_catalog_step.SourceCatalogStep()
@@ -786,7 +797,16 @@ def jwst_apcorr(fname,ee=70,alternate_ref=None):
            aperture_params['bkg_aperture_inner_radius'],
            aperture_params['bkg_aperture_outer_radius']]
         elif ee==20:
-            ees = (10,20,30)
+            ees = (20,30,40)
+            refdata = reference_data.ReferenceData(model, reffile_paths,
+                                ees)
+            aperture_params = refdata.aperture_params
+            return [aperture_params['aperture_radii'][0], 
+           aperture_params['aperture_corrections'][0],
+           aperture_params['bkg_aperture_inner_radius'],
+           aperture_params['bkg_aperture_outer_radius']]
+        elif ee==30:
+            ees = (20,30,40)
             refdata = reference_data.ReferenceData(model, reffile_paths,
                                 ees)
             aperture_params = refdata.aperture_params
@@ -794,17 +814,8 @@ def jwst_apcorr(fname,ee=70,alternate_ref=None):
            aperture_params['aperture_corrections'][1],
            aperture_params['bkg_aperture_inner_radius'],
            aperture_params['bkg_aperture_outer_radius']]
-        elif ee==30:
-            ees = (10,20,30)
-            refdata = reference_data.ReferenceData(model, reffile_paths,
-                                ees)
-            aperture_params = refdata.aperture_params
-            return [aperture_params['aperture_radii'][2], 
-           aperture_params['aperture_corrections'][2],
-           aperture_params['bkg_aperture_inner_radius'],
-           aperture_params['bkg_aperture_outer_radius']]
         else:
-            ees = (10,20,ee)
+            ees = (20,30,ee)
             refdata = reference_data.ReferenceData(model, reffile_paths,
                                 ees)
             aperture_params = refdata.aperture_params
