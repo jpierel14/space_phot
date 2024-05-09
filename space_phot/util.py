@@ -220,7 +220,7 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
         dat = astropy.io.fits.open(f)
         if sky_location is not None:
             imwcs = astropy.wcs.WCS(dat[ext],dat)
-            y,x = skycoord_to_pixel(sky_location,imwcs)
+            y,x = imwcs.world_to_pixel(sky_location)
             if not (0<x<dat['SCI',ext].data.shape[1] and 0<y<dat['SCI',ext].data.shape[0]):
                 continue
 
@@ -740,6 +740,35 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         shutil.rmtree(outdir)
     return level3_psf
 
+
+def jwst_apcorr_interp(fname,radius,alternate_ref=None):
+    import scipy
+    sc = source_catalog.source_catalog_step.SourceCatalogStep()
+    if alternate_ref is not None:
+        fname = alternate_ref
+
+    all_ees = []
+    all_inner = []
+    all_outer = []
+    all_corr = []
+    all_radius = []
+    with datamodels.open(fname) as model:
+        reffile_paths = sc._get_reffile_paths(model)
+        for ees in [(10,20,30),(40,50,60),(70,80,90)]:
+            all_ees = np.append(all_ees,ees)
+            refdata = reference_data.ReferenceData(model, reffile_paths,
+                            ees)
+            aperture_params = refdata.aperture_params
+            all_radius = np.append(all_radius,aperture_params['aperture_radii'])
+            all_corr = np.append(all_corr,aperture_params['aperture_corrections'])
+    
+    if radius>np.max(all_radius):
+        print('Your radius is larger than the largest allowed radius of %f pixels'%np.max(all_radius))
+        return
+    
+    apcorr = scipy.interpolate.interp1d(all_radius,all_corr)(radius)
+    
+    return apcorr, aperture_params['bkg_aperture_inner_radius'], aperture_params['bkg_aperture_outer_radius']
 
 def jwst_apcorr(fname,ee=70,alternate_ref=None):
     sc = source_catalog.source_catalog_step.SourceCatalogStep()

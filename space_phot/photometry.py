@@ -11,7 +11,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import os,sys
 from stsci.skypac import pamutils
 
-from .util import generic_aperture_phot,jwst_apcorr,hst_apcorr,simple_aperture_sum
+from .util import generic_aperture_phot,jwst_apcorr,jwst_apcorr_interp,hst_apcorr,simple_aperture_sum
 from .cal import calibrate_JWST_flux,calibrate_HST_flux,calc_jwst_psf_corr,calc_hst_psf_corr,\
         JWST_mag_to_flux,HST_mag_to_flux
 
@@ -984,7 +984,7 @@ class observation3(observation):
 
     def aperture_photometry(self,sky_location,xy_positions=None,
                 radius=None,encircled_energy=None,skyan_in=None,skyan_out=None,
-                alternate_ref=None):
+                alternate_ref=None,radius_in_arcsec=False):
         """
         We do not provide a PSF photometry method for level 3 data, but aperture photometry is possible.
 
@@ -1008,10 +1008,10 @@ class observation3(observation):
         aperture_result
         """
         assert radius is not None or encircled_energy is not None, 'Must supply radius or ee'
-        assert (self.telescope.lower()=='hst' and radius is not None) or \
-        (self.telescope.lower()=='jwst' and encircled_energy is not None),\
-        'Must supply radius for hst or ee for jwst'
+        assert (self.telescope.lower()=='jwst') or (self.telescope.lower()=='hst' and radius is not None),'Must supply radius for hst'
 
+        if radius_in_arcsec:
+            radius /= self.pixel_scale
         result = {'pos_x':[],'pos_y':[],'aper_bkg':[],'aperture_sum':[],'aperture_sum_err':[],
                   'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
         result_cal = {'flux':[],'fluxerr':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[],'mjd':[]}
@@ -1025,9 +1025,14 @@ class observation3(observation):
         else:
             positions = np.atleast_2d(xy_positions)
         if self.telescope=='JWST':
-            radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.fname,encircled_energy,
-                alternate_ref=alternate_ref)
+            if encircled_energy is not None:
+                radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.fname,encircled_energy,
+                    alternate_ref=alternate_ref)
+            else:
+                apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.fname,radius,
+                    alternate_ref=alternate_ref)
             epadu = self.sci_header['XPOSURE']*self.sci_header['PHOTMJSR']
+
         else:
             if self.sci_header['BUNIT']=='ELECTRON':
                 epadu = 1
@@ -1365,7 +1370,7 @@ class observation2(observation):
 
 
     def aperture_photometry(self,sky_location,xy_positions=None,
-                radius=None,encircled_energy=None,skyan_in=None,skyan_out=None):
+                radius=None,encircled_energy=None,skyan_in=None,skyan_out=None,radius_in_arcsec=False):
         """
         Aperture photometry class for level 2 data
 
@@ -1389,9 +1394,10 @@ class observation2(observation):
         aperture_result
         """
         assert radius is not None or encircled_energy is not None, 'Must supply radius or ee'
-        assert (self.telescope.lower()=='hst' and radius is not None) or \
-        (self.telescope.lower()=='jwst' and encircled_energy is not None),\
-        'Must supply radius for hst or ee for jwst'
+        assert (self.telescope.lower()=='jwst') or (self.telescope.lower()=='hst' and radius is not None),'Must supply radius for hst'
+
+        if radius_in_arcsec:
+            radius /= self.pixel_scale
 
         result = {'pos_x':[],'pos_y':[],'aper_bkg':[],'aperture_sum':[],'aperture_sum_err':[],
                   'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
@@ -1402,7 +1408,11 @@ class observation2(observation):
             else:
                 positions = np.atleast_2d(xy_positions)
             if self.telescope=='JWST':
-                radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.exposure_fnames[i],encircled_energy)
+                if encircled_energy is not None:
+                    radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.exposure_fnames[i],encircled_energy)
+                else:
+                    apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.exposure_fnames[i],radius)
+                
                 epadu = self.sci_headers[i]['XPOSURE']*self.sci_headers[i]['PHOTMJSR']
             else:
                 if self.sci_headers[i]['BUNIT']=='ELECTRON':
