@@ -1026,11 +1026,21 @@ class observation3(observation):
             positions = np.atleast_2d(xy_positions)
         if self.telescope=='JWST':
             if encircled_energy is not None:
-                radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.fname,encircled_energy,
+                apres = jwst_apcorr(self.fname,encircled_energy,
                     alternate_ref=alternate_ref)
+                if apres is None:
+                    print('Failed to get aperture correction with your radius choice.')
+                    return
+                else:
+                    radius,apcorr,skyan_in,skyan_out = apres
             else:
-                encircled_energy,apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.fname,radius,
+                apres = jwst_apcorr_interp(self.fname,radius,
                     alternate_ref=alternate_ref)
+                if apres is None:
+                    print('Failed to get aperture correction with your radius choice.')
+                    return
+                else:
+                    encircled_energy,apcorr,skyan_in,skyan_out = apres
             epadu = self.sci_header['XPOSURE']*self.sci_header['PHOTMJSR']
 
         else:
@@ -1410,9 +1420,20 @@ class observation2(observation):
                 positions = np.atleast_2d(xy_positions)
             if self.telescope=='JWST':
                 if encircled_energy is not None:
-                    radius,apcorr,skyan_in,skyan_out = jwst_apcorr(self.exposure_fnames[i],encircled_energy)
+                    apres = jwst_apcorr(self.exposure_fnames[i],encircled_energy)
+                    if apres is None:
+                        print('Failed to get aperture correction with your radius choice.')
+                        return
+                    else:
+                        radius,apcorr,skyan_in,skyan_out = apres
+
                 else:
-                    encircled_energy,apcorr,skyan_in,skyan_out = jwst_apcorr_interp(self.exposure_fnames[i],radius)
+                    apres = jwst_apcorr_interp(self.exposure_fnames[i],radius)
+                    if apres is None:
+                        print('Failed to get aperture correction with your radius choice.')
+                        return
+                    else:
+                        encircled_energy,apcorr,skyan_in,skyan_out = apres
                 
                 epadu = self.sci_headers[i]['XPOSURE']*self.sci_headers[i]['PHOTMJSR']
             else:

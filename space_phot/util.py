@@ -761,16 +761,20 @@ def jwst_apcorr_interp(fname,radius,alternate_ref=None):
             try:
                 aperture_params = refdata.aperture_params
                 all_ees = np.append(all_ees,ees)
+                all_radius = np.append(all_radius,aperture_params['aperture_radii'])
+                all_corr = np.append(all_corr,aperture_params['aperture_corrections'])
             except:
                 if ees[0]==10:
-                    tempees = ees[1:]+[40]
+                    tempees = np.append(ees[1:],[40]).ravel()
                     refdata = reference_data.ReferenceData(model, reffile_paths,
                             tempees)
                     aperture_params = refdata.aperture_params
                     all_ees = np.append(all_ees,ees[1:])
+                    all_radius = np.append(all_radius,aperture_params['aperture_radii'][:2])
+                    all_corr = np.append(all_corr,aperture_params['aperture_corrections'][:2])
 
-            all_radius = np.append(all_radius,aperture_params['aperture_radii'])
-            all_corr = np.append(all_corr,aperture_params['aperture_corrections'])
+
+            
 
     if radius>np.max(all_radius):
         print('Your radius is larger than the largest allowed radius of %f pixels'%np.max(all_radius))
