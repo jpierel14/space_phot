@@ -772,8 +772,14 @@ def jwst_apcorr_interp(fname,radius,alternate_ref=None):
                     all_ees = np.append(all_ees,ees[1:])
                     all_radius = np.append(all_radius,aperture_params['aperture_radii'][:2])
                     all_corr = np.append(all_corr,aperture_params['aperture_corrections'][:2])
-
-
+                elif ees[-1]==90:
+                    tempees = np.append([60],ees[:2]).ravel()
+                    refdata = reference_data.ReferenceData(model, reffile_paths,
+                            tempees)
+                    aperture_params = refdata.aperture_params
+                    all_ees = np.append(all_ees,ees[1:])
+                    all_radius = np.append(all_radius,aperture_params['aperture_radii'][1:])
+                    all_corr = np.append(all_corr,aperture_params['aperture_corrections'][1:])
             
 
     if radius>np.max(all_radius):
@@ -818,6 +824,7 @@ def jwst_apcorr(fname,ee=70,alternate_ref=None):
            aperture_params['aperture_corrections'][1],
            aperture_params['bkg_aperture_inner_radius'],
            aperture_params['bkg_aperture_outer_radius']]
+
         else:
             ees = (20,30,ee)
             refdata = reference_data.ReferenceData(model, reffile_paths,
