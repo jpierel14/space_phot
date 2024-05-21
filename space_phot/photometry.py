@@ -365,8 +365,8 @@ class observation():
             chisq = chisq_likelihood(parameters)
             return(-.5*chisq)
         
-        #from dynesty import NestedSampler
-        #from dynesty import utils as dyfunc
+        from dynesty import NestedSampler
+        from dynesty import utils as dyfunc
         #from dynesty.pool import Pool
         #import dill
         #import dynesty.utils
@@ -375,15 +375,21 @@ class observation():
         #args = self.psf_model_list,self.wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,[bounds[p] for p in vparam_names],multi_flux,fit_radec,fit_pixel
         #sampler = do_nest(args)
         
-        
-        res = nestle.sample(loglike, prior_transform, ndim, npdim=npdim,
-                          npoints=npoints, method=method, maxiter=maxiter,
-                          maxcall=maxcall, rstate=rstate,
-                          callback=(nestle.print_progress if verbose else None))
+        sampler = NestedSampler(loglike, prior_transform, ndim, nlive = npoints)
+        sampler.run_nested(maxiter=maxiter,maxcall=maxcall,print_progress=True)
+        #res = nestle.sample(loglike, prior_transform, ndim, npdim=npdim,
+        #                  npoints=npoints, method=method, maxiter=maxiter,
+        #                  maxcall=maxcall, rstate=rstate,
+        #                  callback=(nestle.print_progress if verbose else None))
         
         #res = sampler.results
+        res = sampler.results
+        samples = res.samples  # samples
+        weights = res.importance_weights()
 
-        vparameters, cov = nestle.mean_and_cov(res.samples, res.weights)
+        # Compute weighted mean and covariance.
+        vparameters, cov = dyfunc.mean_and_cov(samples, weights)
+        #vparameters, cov = nestle.mean_and_cov(res.samples, res.weights)
         #samples, weights = res.samples, res.importance_weights()
         
         #vparameters, cov = dyfunc.mean_and_cov(samples, weights)
@@ -412,9 +418,9 @@ class observation():
                                    ncall=res.ncall,
                                    logz=res.logz,
                                    logzerr=res.logzerr,
-                                   h=res.h,
+                                   #h=res.h,
                                    samples=res.samples,
-                                   weights=res.weights,
+                                   weights=weights,
                                    logvol=res.logvol,
                                    logl=res.logl,
                                    errors=OrderedDict(zip(vparam_names,
@@ -786,7 +792,7 @@ class observation3(observation):
         cutouts.append(cutout)
         if fit_flux:
             #if all_bg_est!=0:
-            f_guess = [np.nansum(cutout-all_bg_est)]
+            f_guess = [np.nansum(cutout)]
             #else:
             #    f_guess = [np.nansum(cutout-np.nanmedian(self.data))]
             pnames = ['flux']
@@ -1633,7 +1639,7 @@ class observation2(observation):
             
             if fit_flux!='fixed':
                 #if all_bg_est[im]!=0 or True:
-                f_guess = np.nansum(cutout-all_bg_est[im])
+                f_guess = np.nansum(cutout)
                 #else:
                 #    f_guess = np.nansum(cutout-np.nanmedian(self.data_arr_pam[im]))
                 fluxg.append(f_guess)

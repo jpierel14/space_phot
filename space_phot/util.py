@@ -302,12 +302,12 @@ Configured simulation instrument for:
 
 def get_jwst_psf_grid(st_obs,num_psfs=16,fname=None,dateobs=None):
     if fname is None:
-        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs)
+        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs,verbose=False)
     else:
-        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs)
+        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs,verbose=False)
 
     c = webbpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = num_psfs,
-                                                                        detectors=st_obs.detector)
+                                                                        detectors=st_obs.detector,verbose=False)
     #psf = inst.calc_psf(oversample=4,normalize='last')
     grid = c.create_grid()
     
@@ -339,9 +339,9 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
     #inst.filter = st_obs.filter
     #inst.detector=st_obs.detector
     if fname is None:
-        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs)
+        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs,verbose=False)
     else:
-        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs)
+        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs,verbose=False)
 
     if pipeline_level == 3:
         
@@ -361,7 +361,8 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
         x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         #inst.detector_position = (x,y)
         c = webbpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = 1, psf_location = (x,y), fov_pixels = psf_width,
-                                                                        detectors=st_obs.detector,save=False)
+                                                                        detectors=st_obs.detector,save=False,verbose=False,
+                                                                        use_detsampled_psf=True if oversampling==1 else False)
         #psf = inst.calc_psf(oversample=4,normalize='last')
         grid = c.create_grid()
         
@@ -375,6 +376,10 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
     return psf_list
 
 def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_outdir='.'):
+    with open('./stpipe-log.cfg','w') as f:
+        s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
+        f.write(s)
+    #sys.exit()
     psfs = get_jwst_psf(st_obs,sky_location,psf_width=psf_width,pipeline_level=3)
 
     #grid = get_jwst_psf_grid(st_obs,num_psfs=num_psfs)
@@ -459,9 +464,10 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
             xf, yf = np.mgrid[0:dat['SCI',1].data.shape[0],0:dat['SCI',1].data.shape[1]].astype(int)
             #psfs[i].x_0 = x+psf_width*4
             #psfs[i].y_0 = y+psf_width*4
-            psfs[i].x_0 = x
-            psfs[i].y_0 = y
-
+            psfs[i].x_0 = x#int(x)+.5
+            psfs[i].y_0 = y#int(y)+.5
+            #import pdb
+            #pdb.set_trace()
             #dat['SCI',1].data = psfs[i].data#
             dat['SCI',1].data = psfs[i](xf,yf)
             level2_sums.append(np.sum(dat['SCI',1].data))
@@ -485,11 +491,11 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
             #plt.show()
             #sys.exit()
             
-            dat['ERR',1].data = np.ones((1,1))
-            dat['VAR_RNOISE',1].data = np.ones((1,1))
-            dat['VAR_POISSON',1].data = np.ones((1,1))
-            dat['VAR_FLAT',1].data = np.ones((1,1))
-            dat['DQ',1].data = np.zeros(dat[1].data.shape)
+            # dat['ERR',1].data = np.ones((1,1))
+            # dat['VAR_RNOISE',1].data = np.ones((1,1))
+            # dat['VAR_POISSON',1].data = np.ones((1,1))
+            # dat['VAR_FLAT',1].data = np.ones((1,1))
+            # dat['DQ',1].data = np.zeros(dat[1].data.shape)
             dat.writeto(os.path.join(outdir,os.path.basename(f)),overwrite=True)
             #out_fnames.append(os.path.join(outdir,os.path.basename(f)))
             out_fnames.append(os.path.basename(f))
@@ -507,10 +513,10 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         pipe3.outlier_detection.skip = True
         pipe3.skymatch.skip = True
         pipe3.source_catalog.skip = True
-        #pipe3.resample.output_shape = dat[1].data.shape
+        pipe3.resample.output_shape = st_obs3.data.shape
         pipe3.outlier_detection.save_results = False
         #pipe3.resample.output_shape = (dat['SCI',1].data.shape)
-        pipe3.resample.pixel_scale = st_obs3.pixel_scale#[0]#/4
+        pipe3.resample.pixel_scale = st_obs3.pixel_scale#/4#[0]#/4
         #pipe3.resample.pixel_scale_ratio = st_obs3.pixel_scale/st_obs.pixel_scale[0]
         pipe3.run(os.path.join(outdir,'cal_data_asn.json'))
 
@@ -542,30 +548,39 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         #level3 = astropy.convolution.convolve(level3, kernel)
 
         #s = np.sum(level3[mx,my])
-        #level3[mx,my]/=np.sum(level3[mx,my])**2
-        level3[mx,my]*=(np.median(level2_sums)/np.sum(level3[mx,my])*(st_obs3.pixel_scale/np.median(st_obs.pixel_scale)))
+        #level3[mx,my]/=np.sum(level3[mx,my])
+        #level3[mx,my]*=16
+        #print((np.median(level2_sums)/np.sum(level3[mx,my])*(st_obs3.pixel_scale/np.median(st_obs.pixel_scale))))
+        #level3[mx,my]*=(np.median(level2_sums)/np.sum(level3[mx,my])*(st_obs3.pixel_scale/np.median(st_obs.pixel_scale)))
+        #print(np.sum(level3[mx,my]))
         #level3[mx,my]*=16**2
         
         #level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
         #                                              oversampling=4)
-        
-
+        #import pdb
+        #pdb.set_trace()
         
         
         level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False, 
-                                                      oversampling=4)
+                                                      oversampling=1)
+
+        #import pdb
+        #pdb.set_trace()
         temp_fnames = glob.glob(os.path.join(outdir,'*'))
         for f in temp_fnames:
             os.remove(f)
         shutil.rmtree(outdir, ignore_errors=True)
         #os.rmdir(outdir)
-    except RuntimeError:
+        os.remove('stpipe-log.cfg')
+    except:
         print('Failed to create PSF model')
         temp_fnames = glob.glob(os.path.join(outdir,'*'))
         for f in temp_fnames:
             os.remove(f)
         shutil.rmtree(outdir, ignore_errors=True)
-        sys.exit()
+        os.remove('stpipe-log.cfg')
+        
+
     return level3_psf
 
 def get_hst_psf_grid(st_obs):
@@ -743,7 +758,11 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
 
 def jwst_apcorr_interp(fname,radius,alternate_ref=None):
     import scipy
+    with open('stpipe-log.cfg','w') as f:
+        s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
+        f.write(s)
     sc = source_catalog.source_catalog_step.SourceCatalogStep()
+    os.remove('stpipe-log.cfg')
     if alternate_ref is not None:
         fname = alternate_ref
 
@@ -792,7 +811,11 @@ def jwst_apcorr_interp(fname,radius,alternate_ref=None):
     return float(ee_interp), apcorr, aperture_params['bkg_aperture_inner_radius'], aperture_params['bkg_aperture_outer_radius']
 
 def jwst_apcorr(fname,ee=70,alternate_ref=None):
+    with open('./stpipe-log.cfg','w') as f:
+        s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
+        f.write(s)
     sc = source_catalog.source_catalog_step.SourceCatalogStep()
+    os.remove('stpipe-log.cfg')
     if alternate_ref is not None:
         fname = alternate_ref
     with datamodels.open(fname) as model:
