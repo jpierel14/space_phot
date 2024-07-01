@@ -3,7 +3,7 @@ import os
 
 from astropy.io import fits
 from astropy.wcs import WCS
-from drizzlepac import astrodrizzle, tweakback
+#from drizzlepac import astrodrizzle, tweakback
 from itertools import product
 from photutils.psf import GriddedPSFModel
 
@@ -13,7 +13,7 @@ from astropy.nddata import NDData
 
 # from .PyFitting import make_models, get_subtrahend
 from .PSFPhot import get_standard_psf, _get_exec_path
-from .CatalogUtils import get_pam_func, get_acs_pamfunc
+#from .CatalogUtils import get_pam_func, get_acs_pamfunc
 
 
 def _generate_input_coordinates(wcs_naxis, spacing=150.25, offset=100):

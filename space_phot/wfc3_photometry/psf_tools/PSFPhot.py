@@ -7,22 +7,22 @@ import subprocess
 import sys
 import urllib
 
-from astropy.io import fits
-from astropy.stats import sigma_clip
-from astropy.table import Table
-from astropy.wcs import WCS
-from bisect import bisect_left
+#from astropy.io import fits
+#from astropy.stats import sigma_clip
+#from astropy.table import Table
+#from astropy.wcs import WCS
+#from bisect import bisect_left
 #from drizzlepac import astrodrizzle, tweakreg
 #from drizzlepac.wcs_functions import make_perfect_cd
-from skimage.draw import polygon
-from stwcs.distortion import utils
-from stwcs.wcsutil.hstwcs import HSTWCS
+#from skimage.draw import polygon
+#from stwcs.distortion import utils
+#from stwcs.wcsutil.hstwcs import HSTWCS
 
 
-from .CatalogUtils import create_output_wcs, make_chip_catalogs, \
-    make_tweakreg_catfile, rd_to_refpix, get_gaia_cat, create_coverage_map, \
-    pixel_area_correction, update_catalogs, get_apcorr
-from .MatchUtils import get_match_indices, make_id_list
+# from .CatalogUtils import create_output_wcs, make_chip_catalogs, \
+#     make_tweakreg_catfile, rd_to_refpix, get_gaia_cat, create_coverage_map, \
+#     pixel_area_correction, update_catalogs, get_apcorr
+# from .MatchUtils import get_match_indices, make_id_list
 
 
 def align_images(input_images, reference_catalog=None,
