@@ -572,7 +572,7 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         shutil.rmtree(outdir, ignore_errors=True)
         #os.rmdir(outdir)
         os.remove('stpipe-log.cfg')
-    except Exception as e:
+    except RuntimeError:#Exception as e:
         print('Failed to create PSF model')
         print(e)
         temp_fnames = glob.glob(os.path.join(outdir,'*'))
