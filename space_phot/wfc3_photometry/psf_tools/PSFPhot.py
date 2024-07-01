@@ -13,7 +13,7 @@ from astropy.table import Table
 from astropy.wcs import WCS
 from bisect import bisect_left
 #from drizzlepac import astrodrizzle, tweakreg
-from drizzlepac.wcs_functions import make_perfect_cd
+#from drizzlepac.wcs_functions import make_perfect_cd
 from skimage.draw import polygon
 from stwcs.distortion import utils
 from stwcs.wcsutil.hstwcs import HSTWCS
