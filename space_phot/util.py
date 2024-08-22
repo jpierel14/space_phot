@@ -221,7 +221,7 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
         if sky_location is not None:
             imwcs = astropy.wcs.WCS(dat[ext],dat)
             y,x = imwcs.world_to_pixel(sky_location)
-            if not (0<x<dat['SCI',ext].data.shape[1] and 0<y<dat['SCI',ext].data.shape[0]):
+            if not (0<x<dat[ext].data.shape[1] and 0<y<dat[ext].data.shape[0]):
                 continue
 
         if 'FILTER' in dat[0].header.keys():
@@ -231,8 +231,8 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
                 filt = dat[0].header['FILTER2']
             else:
                 filt = dat[0].header['FILTER1']
-        elif 'FILTER' in dat['SCI',ext].header.keys():
-            filt = dat['SCI',ext].header['FILTER']
+        elif 'FILTER' in dat[ext].header.keys():
+            filt = dat[ext].header['FILTER']
         else:
             print('Cannot find FILTER keyword')
             return
@@ -989,7 +989,7 @@ def hst_apcorr(ap,filt,inst):
         ee.remove_column('WAVELENGTH')
     ee_arr = np.array([ee[col] for col in ee.colnames])
     apps = [float(x.split('#')[1]) for x in ee.colnames]
-    interp = scipy.interpolate.interp2d(waves,apps,ee_arr)
+    interp = scipy.interpolate.RectBivariateSpline(waves,apps,ee_arr)
     try:
         filt_wave = sncosmo.get_bandpass(filt).wave_eff
     except:
