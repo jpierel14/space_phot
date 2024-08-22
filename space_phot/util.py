@@ -989,7 +989,9 @@ def hst_apcorr(ap,filt,inst):
         ee.remove_column('WAVELENGTH')
     ee_arr = np.array([ee[col] for col in ee.colnames])
     apps = [float(x.split('#')[1]) for x in ee.colnames]
-    interp = scipy.interpolate.RectBivariateSpline(waves,apps,ee_arr)
+    
+    interp = scipy.interpolate.RectBivariateSpline(waves,apps,ee_arr.T)
+
     try:
         filt_wave = sncosmo.get_bandpass(filt).wave_eff
     except:
