@@ -11,9 +11,12 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import os,sys
 from stsci.skypac import pamutils
 
-from .util import generic_aperture_phot,jwst_apcorr,jwst_apcorr_interp,hst_apcorr,simple_aperture_sum
+from .util import generic_aperture_phot,jwst_apcorr,jwst_apcorr_interp,hst_apcorr,simple_aperture_sum,\
+                    fancy_background_sub
 from .cal import calibrate_JWST_flux,calibrate_HST_flux,calc_jwst_psf_corr,calc_hst_psf_corr,\
         JWST_mag_to_flux,HST_mag_to_flux
+
+from .MIRIMBkgInterp import MIRIMBkgInterp
 
 __all__ = ['observation3','observation2']
 
@@ -167,7 +170,7 @@ class observation():
         self.psf_result.phot_cal_table = phot
         return phot
 
-    def nest_psf(self,vparam_names, bounds,fluxes, fluxerrs,xs,ys,psf_width=7,use_MLE=False,
+    def nest_psf(self,vparam_names, bounds,fluxes, fluxerrs,xs,ys,cutout_big,psf_width=7,use_MLE=False,
                        minsnr=0., priors=None, ppfs=None, npoints=100, method='single',
                        maxiter=None, maxcall=None, modelcov=False, rstate=None,
                        verbose=False, warn=True, **kwargs):
@@ -346,6 +349,146 @@ class observation():
                 # print()
                 #total+=np.sqrt(np.mean((fluxes[i]-mflux)**2))
                 total+=np.nansum((fluxes[i]-mflux)**2/fluxerrs[i]**2)#fluxerrs[i])**2)#*weights)**2)
+                #total+=np.nansum((fluxes[i]-mflux)**2/(np.median(fluxerrs[i])/np.sqrt(fluxes[i]))**2)#fluxerrs[i])**2)#*weights)**2)
+                #total = (fluxes[i][1,1]-mflux[1,1])**2/fluxerrs[i][1,1]
+                #print(total)
+                #print(self.psf_model_list[i].flux,total,np.sum(fluxes[i]-mflux))
+            #print()
+            #sys.exit()
+            return total
+
+        sums = [np.sum(f) for f in fluxes]
+        self.bkg_fluxes = [None]*len(fluxes)
+        self.fancy_bkg_dict=[{}]*len(fluxes)
+        mbi = MIRIMBkgInterp()
+
+        mbi.aper_rad = 3 # radius of aperture around source
+        mbi.ann_width = 3 # width of annulus to compute interpolation from
+        mbi.bkg_mode='nearest' # type of interpolation. Options "none","simple","polynomial" 
+        mbi.combine_fits = True # use the simple model to attenuate the polynomial model
+        mbi.degree = 3 # degree of polynomial fit
+        mbi.h_wht_s = 1 # horizontal weight of simple model
+        mbi.v_wht_s = 1 # vertical weight of simple model
+        mbi.h_wht_p = 1 # horizontal weight of polynomial model
+        mbi.v_wht_p = 1 # vertical weight of simple model
+
+        fit_width = 3
+        yg,xg = np.mgrid[-1*(fit_width-1)/2:(fit_width+1)/2,
+                          -1*(fit_width-1)/2:(fit_width+1)/2].astype(int)
+        yf, xf = yg+int(psf_width/2), xg+int(psf_width/2)
+        def chisq_likelihood_bkg(parameters):
+            total = 0
+            for i in range(len(fluxes)):
+                posx = xs[i]
+                posy = ys[i]
+                
+                if multi_flux:
+                    self.psf_model_list[i].flux = parameters[vparam_names.index('flux%i'%i)]
+                else:
+                    self.psf_model_list[i].flux = parameters[vparam_names.index('flux')]
+                    
+
+
+                if fit_radec:
+                    sky_location = astropy.coordinates.SkyCoord(parameters[vparam_names.index('ra')],
+                                                                parameters[vparam_names.index('dec')],
+                                                                unit=astropy.units.deg)
+                    y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[i])
+                    self.psf_model_list[i].x_0 = x
+                    self.psf_model_list[i].y_0 = y
+                elif fit_pixel:
+                    self.psf_model_list[i].x_0 = parameters[vparam_names.index('x%i'%(i))]
+                    self.psf_model_list[i].y_0 = parameters[vparam_names.index('y%i'%(i))]
+
+
+
+                mflux = self.psf_model_list[i](posx,posy)
+                
+                
+                if self.bkg_fluxes[i] is None or (int(self.psf_model_list[i].y_0.value),\
+                                                int(self.psf_model_list[i].x_0.value)) not\
+                                                in self.fancy_bkg_dict[i].keys():
+                     #(int(self.fancy_background_centers[1])!=int(self.psf_model_list[i].x_0.value) or\
+                     # int(self.fancy_background_centers[0])!=int(self.psf_model_list[i].y_0.value)):
+                    
+                    #bkg,_ = fancy_background_sub(self,pixel_locations=[[self.psf_model_list[i].y_0.value,
+                    #                                        self.psf_model_list[i].x_0.value]],
+                    #                                       do_fit=False,show_plot=True,width=psf_width,
+                    #                                       fudge_center_post=False,inplace=False)
+
+
+                    mbi.src_x = (len(cutout_big)-1)/2
+                    mbi.src_y = (len(cutout_big)-1)/2
+                    diff, bkg, mask = mbi.run(cutout_big[i])
+                    self.bkg_fluxes[i] = bkg[0]#np.rot90(np.rot90(np.rot90(np.flip(bkg[0],0))))#np.flip(np.flip(np.rot90(np.rot90(np.rot90(bkg))),1),0)#np.flip(np.rot90(np.flip(bkg)))
+                    
+                    self.fancy_bkg_dict[i][(int(self.psf_model_list[i].y_0.value),
+                                                int(self.psf_model_list[i].x_0.value))] = self.bkg_fluxes[i]
+                    
+                else:
+                    self.bkg_fluxes[i] = self.fancy_bkg_dict[i][(int(self.psf_model_list[i].y_0.value),
+                                                int(self.psf_model_list[i].x_0.value))]
+                #plt.imshow(fluxes[i][xf, yf])
+                #plt.show()
+                #plt.imshow(mflux[xf, yf])
+                #plt.show()
+                #sys.exit()
+                mflux+=self.bkg_fluxes[i]
+                #plt.imshow(mflux)
+                #plt.show()
+                #print(self.bkg_fluxes[i])
+                #print(mflux)
+                #print(fluxes[i])
+                
+                
+                if False:#1<self.psf_model_list[i].flux<3:
+                    fig,axes = plt.subplots(1,4)
+                    im0 = axes[0].imshow(fluxes[i],origin='lower',
+                        #vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[0])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im0, cax=cax, orientation='vertical')
+                    im1 = axes[1].imshow(mflux,origin='lower',#vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[1])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im1, cax=cax, orientation='vertical')
+                    im2 = axes[2].imshow(fluxes[i]-mflux,origin='lower',#vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[2])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im2, cax=cax, orientation='vertical')
+                    im3 = axes[3].imshow((fluxes[i]-mflux)**2/fluxerrs[i]**2,origin='lower',#vmin=np.nanmin(fluxes[i]),vmax=np.nanmax(np.nanmin(fluxes[i])),
+                        cmap='seismic')
+                    divider = make_axes_locatable(axes[3])
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im3, cax=cax, orientation='vertical')
+                    #plt.imshow(fluxes[i],origin='lower')
+                    plt.tight_layout()
+                    plt.show()
+                    print(parameters,np.nansum((fluxes[i]-mflux)**2/fluxerrs[i]**2),
+                        np.nansum(fluxes[i]-mflux),np.nansum(fluxes[i]),np.nansum(mflux),
+                        np.nanmin((fluxes[i]-mflux)),np.nanmax((fluxes[i]-mflux)))
+                    #if parameters[0]>0 and parameters[0]<5:
+                    #    print(mflux)
+                    #    print(fluxes[i])
+                    #    sys.exit()
+                #plt.imshow(mflux)
+                #plt.show()
+                # print(np.sum(fluxes[i]),np.sum(mflux))
+                #print(weights*((fluxes[i]-mflux)**2))
+                #sys.exit()
+                #print(self.psf_model_list[i].flux,np.nansum(((fluxes[i]-mflux)/fluxerrs[i])**2))
+                # print(fluxes[i])
+                # print(mflux)
+                # print(fluxerrs[i])
+                # print(np.nansum(((fluxes[i]-mflux)/fluxerrs[i])**2))
+                #print()
+                # print()
+                #total+=np.sqrt(np.mean((fluxes[i]-mflux)**2))
+                #total+=np.nansum((fluxes[i]-mflux)**2/fluxerrs[i]**2)#+np.nansum((fluxes[i][xf, yf]-mflux[xf, yf])**2/fluxerrs[i][xf, yf]**2))#fluxerrs[i])**2)#*weights)**2)
+                total+=np.nansum((fluxes[i]-mflux)**2/(np.median(fluxerrs[i])/(10*np.sqrt(fluxes[i])))**2)#fluxerrs[i])**2)#*weights)**2)
                 #total = (fluxes[i][1,1]-mflux[1,1])**2/fluxerrs[i][1,1]
                 #print(total)
                 #print(self.psf_model_list[i].flux,total,np.sum(fluxes[i]-mflux))
@@ -433,7 +576,8 @@ class observation():
                                    psf_arr = None,
                                    big_psf_arr = None,
                                    resid_arr = None,
-                                   phot_cal_table = None)
+                                   phot_cal_table = None,
+                                   bkg_arr=None)
 
         if use_MLE:
             best_ind = res.logl.argmax()
@@ -444,6 +588,7 @@ class observation():
 
         all_mflux_arr = []
         all_resid_arr = []
+        all_bkg_arr = []
         for i in range(len(fluxes)):
             posx = xs[i]
             posy = ys[i]
@@ -463,20 +608,26 @@ class observation():
             elif fit_pixel:
                 self.psf_model_list[i].x_0 = res.best[vparam_names.index('x%i'%(i))]
                 self.psf_model_list[i].y_0 = res.best[vparam_names.index('y%i'%(i))]
+
             
             mflux = self.psf_model_list[i](posx,posy)
             all_mflux_arr.append(mflux*self.pams[i][posx,posy])
 
             if fit_bkg:
                 if multi_flux:
-                    res.data_arr[i]-=res.best[vparam_names.index('bkg%i'%i)]
+                    all_bkg_arr.append(np.zeros_like(res.data_arr[i])+res.best[vparam_names.index('bkg%i'%i)])
                 else:
-                    res.data_arr[i]-=res.best[vparam_names.index('bkg')]
+                    all_bkg_arr.append(np.zeros_like(res.data_arr[i])+res.best[vparam_names.index('bkg')])
+            elif False:
+                all_bkg_arr.append(self.bkg_fluxes[i])
+            else:
+                all_bkg_arr.append(np.zeros_like(res.data_arr[i]))
             #mflux*=self.pams[i][posx,posy]
-            resid = res.data_arr[i]-mflux
+            resid = res.data_arr[i]-mflux-all_bkg_arr[i]
             all_resid_arr.append(resid)
         res.psf_arr = all_mflux_arr
         res.resid_arr = all_resid_arr
+        res.bkg_arr = all_bkg_arr
         self.psf_result = res
 
         return
@@ -493,9 +644,9 @@ class observation():
             return
 
         if self.n_exposures == 1:
-            fig,axes = plt.subplots(self.n_exposures,3,figsize=(2*int(3*self.n_exposures),10))
+            fig,axes = plt.subplots(self.n_exposures,4,figsize=(2*int(4*self.n_exposures),10))
         else:
-            fig,axes = plt.subplots(self.n_exposures,3,figsize=(int(3*self.n_exposures),10))
+            fig,axes = plt.subplots(self.n_exposures,4,figsize=(int(4*self.n_exposures),10))
         axes = np.atleast_2d(axes)
         for i in range(self.n_exposures):
             if fast_n!=0:
@@ -510,19 +661,23 @@ class observation():
             axes[i][0].imshow(self.psf_result.data_arr[d_i],
                 norm=norm1)
             axes[i][0].set_title('Data')
-            im0 = axes[i][1].imshow(self.psf_result.psf_arr[d_i],
+            axes[i][1].imshow(self.psf_result.bkg_arr[d_i],
                 norm=norm1)
-            axes[i][1].set_title('Model')
-            divider = make_axes_locatable(axes[i][1])
+            axes[i][1].set_title('BKG')
+            #divider = make_axes_locatable(axes[i][1])
+            im0 = axes[i][2].imshow(self.psf_result.psf_arr[d_i]+self.psf_result.bkg_arr[d_i],
+                norm=norm1)
+            axes[i][2].set_title('BKG+Model')
+            divider = make_axes_locatable(axes[i][2])
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im0, cax=cax, orientation='vertical')
 
-            im1 = axes[i][2].imshow(self.psf_result.resid_arr[d_i])
-            axes[i][2].set_title('Residual')
-            divider = make_axes_locatable(axes[i][2])
+            im1 = axes[i][3].imshow(self.psf_result.resid_arr[d_i])
+            axes[i][3].set_title('Residual')
+            divider = make_axes_locatable(axes[i][3])
             cax2 = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im1, cax=cax2, orientation='vertical')
-            for j in range(3):
+            for j in range(4):
                 axes[i][j].tick_params(
                     axis='both',          # changes apply to the x-axis
                     which='both',      # both major and minor ticks are affected
@@ -746,7 +901,7 @@ class observation3(observation):
         cutouts = []
         cutout_errs = []
         fluxg = []
-
+        cutouts_big = []
         if background is None:
             all_bg_est = 0 #replace with bkg method
             if not fit_bkg:
@@ -766,8 +921,13 @@ class observation3(observation):
                           -1*(fit_width-1)/2:(fit_width+1)/2].astype(int)
         yf, xf = yg+int(yi+.5), xg+int(xi+.5)
 
+        yg_big, xg_big = np.mgrid[-1*(fit_width+2-1)/2:(fit_width+2+1)/2,
+                          -1*(fit_width+2-1)/2:(fit_width+2+1)/2].astype(int)
+        yf_big, xf_big = yg_big+int(yi+.5), xg_big+int(xi+.5)
+
         
         cutout = self.data[xf, yf]
+        cutout_big = self.data[xf_big, yf_big]
 
         if find_centroid:
             xi2,yi2 = photutils.centroids.centroid_com(cutout)
@@ -790,6 +950,7 @@ class observation3(observation):
         cutout -= all_bg_est
         
         cutouts.append(cutout)
+        cutouts_big.append(cutout_big)
         if fit_flux:
             #if all_bg_est!=0:
             f_guess = [np.nansum(cutout)]
@@ -833,11 +994,11 @@ class observation3(observation):
             pbounds['bkg'] = bounds['bkg']
 
         if psf_method =='nest':
-            self.nest_psf(pnames,pbounds,cutouts,cutout_errs,all_xf,all_yf,
+            self.nest_psf(pnames,pbounds,cutouts,cutout_errs,all_xf,all_yf,cutouts_big,
                         psf_width=fit_width,npoints=npoints,use_MLE=use_MLE,maxiter=maxiter)
         elif psf_method == 'fast':
-            self.fast_psf(pnames,pbounds,fit_width,centers,cutouts,cutout_errs,all_xf,all_yf,ap_rad=5)
-
+            self.fast_psf(self.psf_model_list[0],centers,fit_width,True)
+            #(self,psf_model,centers,psf_width=5,local_bkg=False,**kwargs)
         if fit_centroid:
             result_cal = {'ra':[],'ra_err':[],'dec':[],'dec_err':[],'x':[],'x_err':[],
                       'y':[],'y_err':[],'mjd':[],

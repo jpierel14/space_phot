@@ -37,7 +37,7 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
 from .wfc3_photometry.psf_tools.PSFUtils import make_models
 from .wfc3_photometry.psf_tools.PSFPhot import get_standard_psf
-
+from .MIRIMBkgInterp import MIRIMBkgInterp
 __all__ = ['get_jwst_psf','get_hst_psf','get_jwst3_psf','get_hst3_psf','get_jwst_psf_grid',
             'get_jwst_psf_from_grid']
 
@@ -46,11 +46,11 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
                                 degree=2,h_wht_s = 1,v_wht_s=1,h_wht_p=1,v_wht_p=1,
                                 show_plot=False,minval=-np.inf,fudge_center_pre=False,
                                 fudge_center_post=False,
-                                finalmin=-np.inf):
+                                finalmin=-np.inf,inplace=True):
     assert sky_locations is not None or pixel_locations is not None, "Must give skycoord or pixel."
-    sys.path.append('/Users/jpierel/CodeBase/manuscript_jupyter/pearls_sn/background_sub')
-    import MIRIMBkgInterp
-    mbi = MIRIMBkgInterp.MIRIMBkgInterp()
+    #sys.path.append('/Users/jpierel/CodeBase/manuscript_jupyter/pearls_sn/background_sub')
+    #import MIRIMBkgInterp
+    mbi = MIRIMBkgInterp()
     
     mbi.src_x = (width+2-1)/2
     mbi.src_y = (width+2-1)/2
@@ -169,12 +169,13 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
             for j in range(int((width-1)/2)-1,int((width-1)/2)+2):
                 if diff[0][n][j]<finalmin:
                     diff[0][n][j] = 0
-        if st_obs.n_exposures==1:
-            st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+        if inplace:
+            if st_obs.pipeline_level==3:
+                st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+                                        x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
+            else:
+                st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
                                     x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
-        else:
-            st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-                                x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
 
         if show_plot:
             
@@ -196,9 +197,12 @@ def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13
             cax2 = divider2.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im2, cax=cax2, orientation='vertical')
             plt.show()
-    st_obs.fancy_background_centers = final_pixels
-    st_obs.fancy_bkg_diff = mask[0]-bkg[0]
-    return st_obs,nests,mbi
+    if inplace:
+        st_obs.fancy_background_centers = final_pixels
+        st_obs.fancy_bkg_diff = mask[0]-bkg[0]
+        st_obs.fancy_bkg = bkg[0]
+        return st_obs,nests,mbi
+    return bkg[0],diff[0]
 
 def mjd_dict_from_list(filelist,tolerance=0):
     mjd_dict = {}
@@ -412,49 +416,6 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         for i,f in enumerate(st_obs.exposure_fnames):
             #print(f)
             dat = fits.open(f)
-            #dat['SCI',1].data[np.isnan(dat['SCI',1].data)] = 0
-            #xf, yf = np.mgrid[0:dat['SCI',1].data.shape[0],0:dat['SCI',1].data.shape[1]].astype(int)
-            #norm = astropy.visualization.simple_norm(dat['SCI',1].data,invalid=0,min_cut=-.15,max_cut=.3)
-            #print(np.max(dat['SCI',1].data))
-            #plt.imshow(dat[1].data,norm=norm)
-            #plt.show()
-            #imwcs = wcs.WCS(dat['SCI',1])
-            #y_init,x_init = skycoord_to_pixel(sky_location,imwcs)
-            
-            #print(x,y,pixel_to_skycoord(x,y,imwcs))
-            if False:
-                newx = psfs[i].data.shape[0]#dat[1].header['NAXIS1']*4
-                newy = psfs[i].data.shape[1]#dat[1].header['NAXIS2']*4
-                #dat[1].header['NAXIS1'] = newx
-                #dat[1].header['NAXIS2'] = newy
-                old_wcs = wcs.WCS(dat[1])
-                #print(old_wcs)
-                #new_wcs = old_wcs[::(st_obs3.pixel_scale/st_obs.pixel_scale[0]),::(st_obs3.pixel_scale/st_obs.pixel_scale[0])].to_header()
-                new_wcs = old_wcs[::.25,::.25].to_header()
-                for k in ['PC1_1', 'PC1_2','PC2_1','PC2_2']:
-                    new_wcs[k]/=4#(st_obs3.pixel_scale/st_obs.pixel_scale[0])
-
-
-                for key in new_wcs.keys():
-                    if len(key)>0:
-                        #dm_fits[i].header[key+'A'] = dm_fits[i].header[key]
-                        #if not (self.do_driz or ('CRPIX' in key or 'CTYPE' in key)):
-                        if 'CTYPE' not in key:
-                            if key.startswith('PC') and key not in dat[1].header.keys():
-                                dat[1].header.set(key.replace('PC','CD'),value=new_wcs[key])
-                            elif key in dat[1].header:
-                                dat[1].header.set(key,value=new_wcs[key])
-                                #else:
-                                #    dm_fits[i].header.set(key,value='TWEAK')
-                            #else:
-                            #   print(key)
-                            #   sys.exit()
-                dat[1].header['PIXAR_A2'] = dat[1].header['PIXAR_A2']/16\
-                #dat[1].header['CRPIX1'] = 
-            #dat[1].header['PIXAR_A2'] = st_obs3.pixel_scale**2
-            #dat[1].header['PIXAR_SR'] = dat[1].header['PIXAR_SR']/(st_obs.pixel_scale[0]/st_obs3.pixel_scale)**2
-            #print(newx,newy)
-            #dat['SCI',1].data = np.zeros((newx,newy))
             
             imwcs = wcs.WCS(dat['SCI',1])
             #print(imwcs)
@@ -471,31 +432,6 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
             #dat['SCI',1].data = psfs[i].data#
             dat['SCI',1].data = psfs[i](xf,yf)
             level2_sums.append(np.sum(dat['SCI',1].data))
-            #print(dat['SCI',1].data.shape,st_obs.pams[i].shape,np.pad(st_obs.pams[i],int(psf_width),constant_values=1).shape)
-            #temp_pam = astropy.nddata.utils.extract_array(st_obs.pams[i],[int(dat['SCI',1].data.shape[0]/4)]*2,(x_init,y_init))
-            #dat['SCI',1].data/= scipy.ndimage.zoom(temp_pam,4)
-            
-            #dat['SCI',1].data /= np.pad(st_obs.pams[i],int(psf_width*4),constant_values=1)
-            
-            #bigarr = np.ones(dat['SCI',1].data.shape)
-            #bigarr = astropy.nddata.utils.add_array(bigarr,scipy.ndimage.zoom(temp_pam,4),(y,x))
-            #dat['SCI',1].data/=np.pad(,(int((dat['SCI',1].data.shape[0]-psf_width*4)/2),
-            #                                int((dat['SCI',1].data.shape[1]-psf_width*4)/2)))#st_obs.pams[i]#
-            #dat['SCI',1].data/=bigarr
-            #plt.imshow(dat['SCI',1].data)
-            #plt.show()
-            #print(np.max(dat['SCI',1].data))
-            #dat['SCI',1].data[dat['SCI',1].data>.005] = 10000
-            #plt.imshow(dat[1].data[xf,yf],vmin=0,vmax=.005)
-
-            #plt.show()
-            #sys.exit()
-            
-            # dat['ERR',1].data = np.ones((1,1))
-            # dat['VAR_RNOISE',1].data = np.ones((1,1))
-            # dat['VAR_POISSON',1].data = np.ones((1,1))
-            # dat['VAR_FLAT',1].data = np.ones((1,1))
-            # dat['DQ',1].data = np.zeros(dat[1].data.shape)
             dat.writeto(os.path.join(outdir,os.path.basename(f)),overwrite=True)
             #out_fnames.append(os.path.join(outdir,os.path.basename(f)))
             out_fnames.append(os.path.basename(f))
