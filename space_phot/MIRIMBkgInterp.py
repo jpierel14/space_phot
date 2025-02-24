@@ -14,7 +14,7 @@ from astropy.wcs import WCS
 from astropy.stats import sigma_clipped_stats, SigmaClip
 from matplotlib import pyplot as plt
 import numpy as np
-from photutils import DAOStarFinder, CircularAperture
+from photutils.aperture import CircularAperture
 import polarTransform
 from scipy.signal import convolve2d
 import nestle

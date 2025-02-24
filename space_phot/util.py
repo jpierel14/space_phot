@@ -21,7 +21,7 @@ from astropy.wcs.utils import skycoord_to_pixel,pixel_to_skycoord
 from astropy.nddata import extract_array
 
 import photutils
-from photutils import CircularAperture, CircularAnnulus, aperture_photometry
+from photutils.aperture import CircularAperture, CircularAnnulus, aperture_photometry
 from photutils.psf import EPSFModel
 warnings.simplefilter('ignore')
 import jwst
