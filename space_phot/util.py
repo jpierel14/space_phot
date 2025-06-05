@@ -37,172 +37,172 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
 from .wfc3_photometry.psf_tools.PSFUtils import make_models
 from .wfc3_photometry.psf_tools.PSFPhot import get_standard_psf
-from .MIRIMBkgInterp import MIRIMBkgInterp
+#from .MIRIMBkgInterp import MIRIMBkgInterp
 __all__ = ['get_jwst_psf','get_hst_psf','get_jwst3_psf','get_hst3_psf','get_jwst_psf_grid',
             'get_jwst_psf_from_grid']
 
-def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13,
-                                bkg_mode='polynomial',combine_fits=True,do_fit=True,
-                                degree=2,h_wht_s = 1,v_wht_s=1,h_wht_p=1,v_wht_p=1,
-                                show_plot=False,minval=-np.inf,fudge_center_pre=False,
-                                fudge_center_post=False,
-                                finalmin=-np.inf,inplace=True):
-    assert sky_locations is not None or pixel_locations is not None, "Must give skycoord or pixel."
-    #sys.path.append('/Users/jpierel/CodeBase/manuscript_jupyter/pearls_sn/background_sub')
-    #import MIRIMBkgInterp
-    mbi = MIRIMBkgInterp()
+# def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13,
+#                                 bkg_mode='polynomial',combine_fits=True,do_fit=True,
+#                                 degree=2,h_wht_s = 1,v_wht_s=1,h_wht_p=1,v_wht_p=1,
+#                                 show_plot=False,minval=-np.inf,fudge_center_pre=False,
+#                                 fudge_center_post=False,
+#                                 finalmin=-np.inf,inplace=True):
+#     assert sky_locations is not None or pixel_locations is not None, "Must give skycoord or pixel."
+#     #sys.path.append('/Users/jpierel/CodeBase/manuscript_jupyter/pearls_sn/background_sub')
+#     #import MIRIMBkgInterp
+#     mbi = MIRIMBkgInterp()
     
-    mbi.src_x = (width+2-1)/2
-    mbi.src_y = (width+2-1)/2
-    mbi.aper_rad = 3 # radius of aperture around source
-    mbi.ann_width = 3 # width of annulus to compute interpolation from
-    mbi.bkg_mode=bkg_mode # type of interpolation. Options "none","simple","polynomial" 
-    mbi.combine_fits = True # use the simple model to attenuate the polynomial model
-    mbi.degree = degree # degree of polynomial fit
-    mbi.h_wht_s = h_wht_s # horizontal weight of simple model
-    mbi.v_wht_s = v_wht_s # vertical weight of simple model
-    mbi.h_wht_p = h_wht_p # horizontal weight of polynomial model
-    mbi.v_wht_p = v_wht_p # vertical weight of simple model
-    if pixel_locations is None and not isinstance(sky_locations,(list,tuple,np.ndarray)):
-        sky_locations = [sky_locations]*st_obs.n_exposures
-    elif isinstance(pixel_locations[0],(int,float)):
-        pixel_locations = [pixel_locations]*st_obs.n_exposures
+#     mbi.src_x = (width+2-1)/2
+#     mbi.src_y = (width+2-1)/2
+#     mbi.aper_rad = 3 # radius of aperture around source
+#     mbi.ann_width = 3 # width of annulus to compute interpolation from
+#     mbi.bkg_mode=bkg_mode # type of interpolation. Options "none","simple","polynomial" 
+#     mbi.combine_fits = True # use the simple model to attenuate the polynomial model
+#     mbi.degree = degree # degree of polynomial fit
+#     mbi.h_wht_s = h_wht_s # horizontal weight of simple model
+#     mbi.v_wht_s = v_wht_s # vertical weight of simple model
+#     mbi.h_wht_p = h_wht_p # horizontal weight of polynomial model
+#     mbi.v_wht_p = v_wht_p # vertical weight of simple model
+#     if pixel_locations is None and not isinstance(sky_locations,(list,tuple,np.ndarray)):
+#         sky_locations = [sky_locations]*st_obs.n_exposures
+#     elif isinstance(pixel_locations[0],(int,float)):
+#         pixel_locations = [pixel_locations]*st_obs.n_exposures
 
-    final_pixels = []
-    nests = []
-    for i in range(st_obs.n_exposures):
-        if pixel_locations is None:
-            if st_obs.n_exposures==1:
-                wcs = st_obs.wcs
-            else:
-                wcs = st_obs.wcs_list[i]
-            x,y = wcs.world_to_pixel(sky_locations[i])
-            x = int(x)
-            y = int(y)
-        else:
-            x,y = pixel_locations[i]
-            x = int(x)
-            y = int(y)
-        #print(x,y)
-        width+=2
-        if st_obs.n_exposures==1:
-            cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-                                    x-int((width-1)/2):x+int((width-1)/2)+1]
-        else:
-            cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-                                    x-int((width-1)/2):x+int((width-1)/2)+1]
+#     final_pixels = []
+#     nests = []
+#     for i in range(st_obs.n_exposures):
+#         if pixel_locations is None:
+#             if st_obs.n_exposures==1:
+#                 wcs = st_obs.wcs
+#             else:
+#                 wcs = st_obs.wcs_list[i]
+#             x,y = wcs.world_to_pixel(sky_locations[i])
+#             x = int(x)
+#             y = int(y)
+#         else:
+#             x,y = pixel_locations[i]
+#             x = int(x)
+#             y = int(y)
+#         #print(x,y)
+#         width+=2
+#         if st_obs.n_exposures==1:
+#             cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                     x-int((width-1)/2):x+int((width-1)/2)+1]
+#         else:
+#             cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                     x-int((width-1)/2):x+int((width-1)/2)+1]
 
 
         
 
-        cutout[cutout<minval] = np.nan
+#         cutout[cutout<minval] = np.nan
 
-        if fudge_center_pre:
-            init_center = int((width-1)/2)
-            #plt.imshow(cutout)
-            #plt.show()
-            #plt.imshow(cutout[init_center-1:init_center+2,init_center-1:init_center+2])
-            #plt.show()
-            maxcell = np.argmax(cutout[init_center-1:init_center+2,init_center-1:init_center+2])
-            max_ind = np.unravel_index(maxcell,(3,3))
-            x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
-            #print(x,y)
-            if st_obs.n_exposures==1:
-                cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-                                        x-int((width-1)/2):x+int((width-1)/2)+1]
-            else:
-                cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-                                        x-int((width-1)/2):x+int((width-1)/2)+1]
+#         if fudge_center_pre:
+#             init_center = int((width-1)/2)
+#             #plt.imshow(cutout)
+#             #plt.show()
+#             #plt.imshow(cutout[init_center-1:init_center+2,init_center-1:init_center+2])
+#             #plt.show()
+#             maxcell = np.argmax(cutout[init_center-1:init_center+2,init_center-1:init_center+2])
+#             max_ind = np.unravel_index(maxcell,(3,3))
+#             x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
+#             #print(x,y)
+#             if st_obs.n_exposures==1:
+#                 cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
+#             else:
+#                 cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
 
-        final_pixels.append([y,x])
+#         final_pixels.append([y,x])
         
 
             
         
         
-        # run interpolation
-        if not do_fit:
-            diff, bkg, mask = mbi.run(cutout)
+#         # run interpolation
+#         if not do_fit:
+#             diff, bkg, mask = mbi.run(cutout)
             
-        else:
-            (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
-            nests.append(result_nest)
+#         else:
+#             (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
+#             nests.append(result_nest)
 
-        if fudge_center_post:
-            width-=2
-            nests = nests[:-1]
-            final_pixels = final_pixels[:-1]
-            init_center = int((width-1)/2)
+#         if fudge_center_post:
+#             width-=2
+#             nests = nests[:-1]
+#             final_pixels = final_pixels[:-1]
+#             init_center = int((width-1)/2)
 
-            maxcell = np.argmax(diff[0][init_center-1:init_center+2,init_center-1:init_center+2])
-            max_ind = np.unravel_index(maxcell,(3,3))
+#             maxcell = np.argmax(diff[0][init_center-1:init_center+2,init_center-1:init_center+2])
+#             max_ind = np.unravel_index(maxcell,(3,3))
 
-            x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
-            width+=2
+#             x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
+#             width+=2
 
-            if st_obs.n_exposures==1:
-                cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-                                        x-int((width-1)/2):x+int((width-1)/2)+1]
-            else:
-                cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-                                        x-int((width-1)/2):x+int((width-1)/2)+1]
-            final_pixels.append([y,x])
-            if not do_fit:
-                diff, bkg, mask = mbi.run(cutout)
+#             if st_obs.n_exposures==1:
+#                 cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
+#             else:
+#                 cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
+#             final_pixels.append([y,x])
+#             if not do_fit:
+#                 diff, bkg, mask = mbi.run(cutout)
                 
-            else:
-                (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
-                nests.append(result_nest)
-        width-=2
-        if show_plot:
-            norm = astropy.visualization.simple_norm(cutout[1:-1,1:-1],invalid=0)
-            fig, axes = plt.subplots(1,4,figsize=(12,5))
-            axes[0].set_title('image')
-            axes[0].imshow(cutout[1:-1,1:-1],origin='lower',norm=norm,cmap='viridis')
-        #print(np.nanmedian(diff[0]))
-        #print(np.nanmedian(bkg[0]))
-        #print(np.nanmedian(mask[0]))
-        #print()
-        #print()
+#             else:
+#                 (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
+#                 nests.append(result_nest)
+#         width-=2
+#         if show_plot:
+#             norm = astropy.visualization.simple_norm(cutout[1:-1,1:-1],invalid=0)
+#             fig, axes = plt.subplots(1,4,figsize=(12,5))
+#             axes[0].set_title('image')
+#             axes[0].imshow(cutout[1:-1,1:-1],origin='lower',norm=norm,cmap='viridis')
+#         #print(np.nanmedian(diff[0]))
+#         #print(np.nanmedian(bkg[0]))
+#         #print(np.nanmedian(mask[0]))
+#         #print()
+#         #print()
 
-        for n in range(int((width-1)/2)-1,int((width-1)/2)+2):
-            for j in range(int((width-1)/2)-1,int((width-1)/2)+2):
-                if diff[0][n][j]<finalmin:
-                    diff[0][n][j] = 0
-        if inplace:
-            if st_obs.pipeline_level==3:
-                st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-                                        x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
-            else:
-                st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-                                    x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
+#         for n in range(int((width-1)/2)-1,int((width-1)/2)+2):
+#             for j in range(int((width-1)/2)-1,int((width-1)/2)+2):
+#                 if diff[0][n][j]<finalmin:
+#                     diff[0][n][j] = 0
+#         if inplace:
+#             if st_obs.pipeline_level==3:
+#                 st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                         x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
+#             else:
+#                 st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
+#                                     x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
 
-        if show_plot:
+#         if show_plot:
             
 
             
 
-            axes[1].set_title('masked')
-            axes[1].imshow(mask[0],origin='lower',norm=norm,cmap='viridis')
+#             axes[1].set_title('masked')
+#             axes[1].imshow(mask[0],origin='lower',norm=norm,cmap='viridis')
 
-            axes[2].set_title('bkg')
-            im1 = axes[2].imshow(bkg[0],origin='lower',norm=norm,cmap='viridis')
-            divider = make_axes_locatable(axes[2])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im1, cax=cax, orientation='vertical')
-            axes[3].set_title('bkg sub')
-            norm = astropy.visualization.simple_norm(diff[0],invalid=0)
-            im2 = axes[3].imshow(diff[0],origin='lower',norm=norm,cmap='seismic')
-            divider2 = make_axes_locatable(axes[3])
-            cax2 = divider2.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im2, cax=cax2, orientation='vertical')
-            plt.show()
-    if inplace:
-        st_obs.fancy_background_centers = final_pixels
-        st_obs.fancy_bkg_diff = mask[0]-bkg[0]
-        st_obs.fancy_bkg = bkg[0]
-        return st_obs,nests,mbi
-    return bkg[0],diff[0]
+#             axes[2].set_title('bkg')
+#             im1 = axes[2].imshow(bkg[0],origin='lower',norm=norm,cmap='viridis')
+#             divider = make_axes_locatable(axes[2])
+#             cax = divider.append_axes('right', size='5%', pad=0.05)
+#             fig.colorbar(im1, cax=cax, orientation='vertical')
+#             axes[3].set_title('bkg sub')
+#             norm = astropy.visualization.simple_norm(diff[0],invalid=0)
+#             im2 = axes[3].imshow(diff[0],origin='lower',norm=norm,cmap='seismic')
+#             divider2 = make_axes_locatable(axes[3])
+#             cax2 = divider2.append_axes('right', size='5%', pad=0.05)
+#             fig.colorbar(im2, cax=cax2, orientation='vertical')
+#             plt.show()
+#     if inplace:
+#         st_obs.fancy_background_centers = final_pixels
+#         st_obs.fancy_bkg_diff = mask[0]-bkg[0]
+#         st_obs.fancy_bkg = bkg[0]
+#         return st_obs,nests,mbi
+#     return bkg[0],diff[0]
 
 def mjd_dict_from_list(filelist,tolerance=0):
     mjd_dict = {}
@@ -224,6 +224,9 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
         dat = astropy.io.fits.open(f)
         if sky_location is not None:
             imwcs = astropy.wcs.WCS(dat[ext],dat)
+            import pdb
+            pdb.set_trace()
+            print(sky_location)
             y,x = imwcs.world_to_pixel(sky_location)
             if not (0<x<dat[ext].data.shape[1] and 0<y<dat[ext].data.shape[0]):
                 continue
