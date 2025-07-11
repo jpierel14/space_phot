@@ -862,7 +862,7 @@ class observation3(observation):
 
     def psf_photometry(self,psf_model,sky_location=None,xy_position=None,fit_width=None,background=None,
                         fit_flux=True,fit_centroid=True,fit_bkg=False,bounds={},npoints=100,use_MLE=False,
-                        xshift=0,yshift=0,
+                        xshift=0,yshift=0,centroidx_shift=0,centroidy_shift=0,
                         maxiter=None,find_centroid=False,minVal=-np.inf,psf_method='nest',center_weight=20):
         """
         st_phot psf photometry class for level 2 data.
@@ -974,7 +974,8 @@ class observation3(observation):
         self.bkg_fluxes = [all_bg_est]
 
         if find_centroid:
-            xi2,yi2 = photutils.centroids.centroid_com(cutout)
+            #xi2,yi2 = photutils.centroids.centroid_com(cutout)
+            xi2,yi2 = np.argmax(cutout)
 
             xi += (xi2-(fit_width-1)/2)
             yi += (yi2-(fit_width-1)/2)
@@ -984,7 +985,7 @@ class observation3(observation):
         all_yf.append(yf)
         cutout[cutout<minVal] = 0
 
-        center = [xi,yi]
+        center = [xi+centroidx_shift,yi+centroidy_shift]
         centers.append(center)
         
         err = self.err[xf, yf]
@@ -1822,7 +1823,8 @@ class observation2(observation):
             else:
                 all_bg_est.append(np.array(background))
             if find_centroid:
-                xi2,yi2 = photutils.centroids.centroid_com(cutout)
+                #xi2,yi2 = photutils.centroids.centroid_com(cutout)
+                xi2,yi2 = np.argmax(cutout)
                 #print(xi,yi,xi2,yi2,(xi2-(fit_width-1)/2),(yi2-(fit_width-1)/2))
                 #plt.imshow(cutout)
                 #plt.show()

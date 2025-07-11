@@ -2,7 +2,7 @@ import warnings,os,sys,time,glob,shutil
 import numpy as np
 import urllib.request
 import scipy
-import webbpsf
+import stpsf
 
 import sncosmo
 
@@ -224,9 +224,7 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
         dat = astropy.io.fits.open(f)
         if sky_location is not None:
             imwcs = astropy.wcs.WCS(dat[ext],dat)
-            import pdb
-            pdb.set_trace()
-            print(sky_location)
+
             y,x = imwcs.world_to_pixel(sky_location)
             if not (0<x<dat[ext].data.shape[1] and 0<y<dat[ext].data.shape[0]):
                 continue
@@ -248,8 +246,8 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
         filt_dict[filt].append(f)
     return filt_dict
 
-def webbpsf_setup_sim_to_match_file(filename_or_HDUList, verbose=True, plot=False,dateobs=None):
-    """ Setup a webbpsf Instrument instance matched to a given 
+def stpsf_setup_sim_to_match_file(filename_or_HDUList, verbose=True, plot=False,dateobs=None):
+    """ Setup a stpsf Instrument instance matched to a given 
     """
     if isinstance(filename_or_HDUList,str):
         if verbose:
@@ -260,11 +258,11 @@ def webbpsf_setup_sim_to_match_file(filename_or_HDUList, verbose=True, plot=Fals
         if verbose:
             print(f"Setting up sim to match provided FITS HDUList object")
 
-    inst = webbpsf.instrument(header['INSTRUME'])
+    inst = stpsf.instrument(header['INSTRUME'])
 
     if inst.name=='MIRI' and header['FILTER']=='P750L':
-        # webbpsf doesn't model the MIRI LRS prism spectral response
-        print("Please note, webbpsf does not currently model the LRS spectral response. Setting filter to F770W instead.")
+        # stpsf doesn't model the MIRI LRS prism spectral response
+        print("Please note, stpsf does not currently model the LRS spectral response. Setting filter to F770W instead.")
         inst.filter='F770W'
     else:
         inst.filter=header['filter']
@@ -280,7 +278,7 @@ def webbpsf_setup_sim_to_match_file(filename_or_HDUList, verbose=True, plot=Fals
         if header['PUPIL'].startswith('MASK'):
             inst.pupil_mask = header['PUPIL']
             inst.image_mask = header['CORONMSK'].replace('MASKA', 'MASK')  # note, have to modify the value slightly for
-                                                                           # consistency with the labels used in webbpsf
+                                                                           # consistency with the labels used in stpsf
     elif inst.name == 'MIRI':
         if inst.filter in ['F1065C', 'F1140C', 'F1550C']:
             inst.image_mask = 'FQPM'+inst.filter[1:5]
@@ -309,11 +307,11 @@ Configured simulation instrument for:
 
 def get_jwst_psf_grid(st_obs,num_psfs=16,fname=None,dateobs=None):
     if fname is None:
-        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs,verbose=False)
+        inst = stpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs,verbose=False)
     else:
-        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs,verbose=False)
+        inst = stpsf_setup_sim_to_match_file(fname,dateobs=dateobs,verbose=False)
 
-    c = webbpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = num_psfs,
+    c = stpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = num_psfs,
                                                                         detectors=st_obs.detector,verbose=False)
     #psf = inst.calc_psf(oversample=4,normalize='last')
     grid = c.create_grid()
@@ -342,13 +340,13 @@ def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
 
 def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,dateobs=None):
     
-    #inst = webbpsf.instrument(st_obs.instrument)
+    #inst = stpsf.instrument(st_obs.instrument)
     #inst.filter = st_obs.filter
     #inst.detector=st_obs.detector
     if fname is None:
-        inst = webbpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs,verbose=False)
+        inst = stpsf_setup_sim_to_match_file(st_obs.exposure_fnames[0],dateobs=dateobs,verbose=False)
     else:
-        inst = webbpsf_setup_sim_to_match_file(fname,dateobs=dateobs,verbose=False)
+        inst = stpsf_setup_sim_to_match_file(fname,dateobs=dateobs,verbose=False)
 
     if pipeline_level == 3:
         
@@ -367,14 +365,14 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
         imwcs = st_obs.wcs_list[i]
         x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
         #inst.detector_position = (x,y)
-        c = webbpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = 1, psf_location = (x,y), fov_pixels = psf_width,
+        c = stpsf.gridded_library.CreatePSFLibrary(inst,inst.filter,  num_psfs = 1, psf_location = (x,y), fov_pixels = psf_width,
                                                                         detectors=st_obs.detector,save=False,verbose=False,
                                                                         use_detsampled_psf=True if oversampling==1 else False)
         #psf = inst.calc_psf(oversample=4,normalize='last')
         grid = c.create_grid()
         
         #psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
-        #webbpsf.detectors.apply_detector_ipc(psf, extname=0)
+        #stpsf.detectors.apply_detector_ipc(psf, extname=0)
        
         #epsf_model = photutils.psf.FittableImageModel(psf[0].data*16,normalize=False,oversampling=oversampling)
         #epsf_model = photutils.psf.FittableImageModel(grid.data[0,:,:]/np.sum(grid.data[0,:,:])*16,normalize=False,oversampling=oversampling)
@@ -830,9 +828,13 @@ def generic_aperture_phot(data,positions,radius,sky,epadu=1,error=None):
     bkg_median = []
     bkg_stdev = []
     for mask in annulus_mask:
-        annulus_data = mask.multiply(data)
-        annulus_data_1d = annulus_data[mask.data > 0]
-        _, median_sigclip, stdev_sigclip = sigma_clipped_stats(annulus_data_1d)
+        try:
+            annulus_data = mask.multiply(data)
+            annulus_data_1d = annulus_data[mask.data > 0]
+            _, median_sigclip, stdev_sigclip = sigma_clipped_stats(annulus_data_1d)
+        except:
+            median_sigclip = np.nan
+            stdev_sigclip = np.nan
         bkg_median.append(median_sigclip)
         bkg_stdev.append(stdev_sigclip)
     bkg_median = np.array(bkg_median)#32.672334253787994#33#

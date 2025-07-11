@@ -1,7 +1,7 @@
 import astropy
 import numpy as np
 import os,scipy
-import webbpsf
+import stpsf
 import matplotlib.pyplot as plt
 from poppy.utils import radial_profile
 import sys
@@ -93,12 +93,12 @@ def HST_mag_to_flux(mag,primary_header,sci_header,zpsys='ab'):
 
 def calc_jwst_psf_corr(ap_rad,instrument,band,imwcs,oversample=4,show_plot=False,psf=None):
     if psf is None:
-        inst = webbpsf.instrument(instrument)
+        inst = stpsf.instrument(instrument)
         inst.filter = band
         psf = inst.calc_psf(oversample=oversample)
 
     if show_plot:
-        webbpsf.display_ee(psf)
+        stpsf.display_ee(psf)
         plt.show()
     radius, profile, ee = radial_profile(psf, ee=True, ext=0)
     ee_func = scipy.interpolate.interp1d(radius,ee)
