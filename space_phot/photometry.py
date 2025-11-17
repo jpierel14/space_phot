@@ -1227,7 +1227,6 @@ class observation3(observation):
                   'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
         result_cal = {'flux':[],'fluxerr':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[],'mjd':[]}
 
-
         if xy_positions is None:
             try:
                 positions = np.atleast_2d(list(zip(*astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))))
@@ -1261,7 +1260,7 @@ class observation3(observation):
                 epadu = self.prim_header['EXPTIME']
             px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs)[0] *\
                                                                          self.wcs.wcs.cunit[0].to('arcsec')
-            apcorr = hst_apcorr(radius*px_scale,self.filter,self.instrument)
+            apcorr = hst_apcorr(radius*px_scale,self.filter,self.instrument)[0]
             if skyan_in is None:
                 skyan_in = radius*3
             if skyan_out is None:
@@ -1270,11 +1269,13 @@ class observation3(observation):
         sky = {'sky_in':skyan_in,'sky_out':skyan_out}
         phot = generic_aperture_phot(self.data,positions,radius,sky,error=self.err,
                                             epadu=epadu)
+
         for k in phot.keys():
             if k in result.keys():
                 result[k] = phot[k]
         result['pos_x'] = [positions[i][0] for i in range(len(positions))]
         result['pos_y'] = [positions[i][1] for i in range(len(positions))]
+        
         if self.telescope.lower()=='jwst':
             result['aper_sum_corrected'] = np.array(phot['aper_sum_bkgsub'] * apcorr)
             result['aperture_sum_err']*= apcorr
@@ -1714,7 +1715,8 @@ class observation2(observation):
 
     def psf_photometry(self,psf_model,sky_location=None,xy_positions=[],fit_width=None,background=None,
                         fit_flux='single',fit_centroid='pixel',fit_bkg=False,bounds={},npoints=100,use_MLE=False,
-                        maxiter=None,find_centroid=False,minVal=-np.inf,center_weight=20.0):
+                        maxiter=None,find_centroid=False,minVal=-np.inf,center_weight=20.0,
+                        xshift=0,yshift=0):
         """
         st_phot psf photometry class for level 2 data.
 
@@ -1799,12 +1801,18 @@ class observation2(observation):
         else:
             self.psf_model_list = psf_model
 
+        if isinstance(xshift,(int,float)):
+            xshift = [xshift]*self.n_exposures
+        if isinstance(yshift,(int,float)):
+            yshift = [yshift]*self.n_exposures
         for im in range(self.n_exposures):
             if len(xy_positions)==self.n_exposures:
                 xi,yi = xy_positions[im]
             else:
                 yi,xi = astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[im])
             
+            xi+=xshift[im]
+            yi+=yshift[im]
             
             yg, xg = np.mgrid[-1*(fit_width-1)/2:(fit_width+1)/2,
                               -1*(fit_width-1)/2:(fit_width+1)/2].astype(int)
@@ -1820,27 +1828,59 @@ class observation2(observation):
                     print('Warning: No background subtracting happening here.')
             elif isinstance(background,(int,float)):
                 all_bg_est.append(background+np.zeros_like(cutout))
+            elif len(background)==self.n_exposures:
+                all_bg_est.append(background[im]+np.zeros_like(cutout))
             else:
                 all_bg_est.append(np.array(background))
             if find_centroid:
                 #xi2,yi2 = photutils.centroids.centroid_com(cutout)
-                xi2,yi2 = np.argmax(cutout)
+
+                h, w = cutout.shape
+                hx, hy = w // 2, h // 2
+
+                peak_idx = np.argmax(cutout)
+                peak_y,peak_x = np.unravel_index(peak_idx, cutout.shape)
+
+                # Offset from old center (can be fractional if desired)
+                dy = peak_y - hy
+                dx = peak_x - hx
+                #import pdb
+                #pdb.set_trace()
+
+                # New center in full-image coordinates
+                new_x = xi + dx
+                new_y = yi + dy
+
+                # # Extract new cutout
+                # x1 = int(round(new_x)) - hx
+                # x2 = int(round(new_x)) + hx + 1
+                # y1 = int(round(new_y)) - hy
+                # y2 = int(round(new_y)) + hy + 1
+                y1 = int(np.round(new_y)) - hy
+                y2 = y1 + h
+                x1 = int(np.round(new_x)) - hx
+                x2 = x1 + w
+                #new_cutout = full_image[y1:y2, x1:x2]
                 #print(xi,yi,xi2,yi2,(xi2-(fit_width-1)/2),(yi2-(fit_width-1)/2))
                 #plt.imshow(cutout)
                 #plt.show()
 
-                xi += (xi2-(fit_width-1)/2)
-                yi += (yi2-(fit_width-1)/2)
-                yf, xf = yg+np.round(yi).astype(int), xg+np.round(xi).astype(int)
-                cutout = self.data_arr_pam[im][xf, yf]
+                #xi += (xi2-(fit_width-1)/2)
+                #yi += (yi2-(fit_width-1)/2)
+                #yf, xf = yg+np.round(yi).astype(int), xg+np.round(xi).astype(int)
+                #yf, xf = yg+np.round(yi).astype(int), xg+np.round(xi).astype(int)
+                yf,xf = np.mgrid[y1:y2, x1:x2]
+                cutout = self.data_arr_pam[im][xf,yf]
+                centers.append([new_x,new_y])
                 #plt.imshow(cutout)
                 #plt.show()
-            
-            centers.append([xi,yi])
+            else:
+                centers.append([xi,yi])
 
             all_xf.append(xf)
             all_yf.append(yf)
             err = self.err_arr[im][xf, yf]
+
             err[np.isnan(err)] = np.nanmax(err)
             err[err<=0] = np.max(err)
             err[cutout<minVal] = np.max(err)
@@ -2034,7 +2074,7 @@ class observation2(observation):
 
                 
                 flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum,
-                    self.psf_result.errors[flux_var],self.wcs_list[i])
+                    self.psf_result.errors[flux_var],self.wcs_list[i],flux_units=self.flux_units)
             else:
 
                 flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum,

@@ -226,7 +226,8 @@ def filter_dict_from_list(filelist,sky_location=None,ext=1):
             imwcs = astropy.wcs.WCS(dat[ext],dat)
 
             y,x = imwcs.world_to_pixel(sky_location)
-            if not (0<x<dat[ext].data.shape[1] and 0<y<dat[ext].data.shape[0]):
+    
+            if not (0<x<dat[ext].data.shape[0] and 0<y<dat[ext].data.shape[1]):
                 continue
 
         if 'FILTER' in dat[0].header.keys():
@@ -530,14 +531,47 @@ def get_hst_psf(st_obs,sky_location,psf_width=25,pipeline_level=2):
     grid = make_models(get_standard_psf(os.path.join(os.path.abspath(os.path.dirname(__file__)),
             'wfc3_photometry/psfs'),st_obs.filter,st_obs.detector))[0]
     psf_list = []
+    _, oversamp = np.array(grid.oversampling, dtype=float)
+
     for i in range(st_obs.n_exposures):
         imwcs = st_obs.wcs_list[i]
         y,x = astropy.wcs.utils.skycoord_to_pixel(sky_location,imwcs)
-        psfinterp = grid._calc_interpolator(int(x), int(y))
-        _psf_interp = psfinterp(grid._xidx, grid._yidx)
+
+        size_os = psf_width * oversamp
+
+        # Make size_os odd so we have a clean center
+        if size_os % 2 == 0:
+            size_os += 1
+
+        half_os = size_os // 2
+
+        # Grid in oversampled pixel indices around the center
+        # (j, i) ~ (y, x)
+        jj, ii = np.mgrid[-half_os:half_os+1, -half_os:half_os+1]
+
+        # Convert oversampled pixel offsets to detector coordinates
+        # 1 oversampled pixel = 1 / oversamp detector pixels
+        x_coords = x + ii / oversamp
+        y_coords = y + jj / oversamp
+
+        # GriddedPSFModel expects x, y arrays (broadcastable)
+        #stamp = psf_model(x_coords, y_coords)
+
+        # Photutils wants positions as (y, x) stacked into an array
+        
+
+        # Evaluate PSF
+        vals = grid.evaluate(x_coords,y_coords,1,float(x),float(y))
+        _psf_interp = vals.reshape((int(size_os), int(size_os)))
+        #grid_idx, _ = grid._find_bounding_points(x,y)
+        #print(grid_idx)
+        #psfinterp = grid._calc_interpolator(int(x), int(y))
+        #psfinterp = grid._calc_interpolator(grid_idx)
+        #_psf_interp = psfinterp(grid._xidx, grid._yidx)
         _psf_interp/=simple_aperture_sum(_psf_interp,[[_psf_interp.shape[0]/2,_psf_interp.shape[0]/2]],5.6*4)
         _psf_interp*=16
         _psf_interp*=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.instrument))
+
         if pipeline_level==2:
             psfmodel = photutils.psf.FittableImageModel(_psf_interp,
                                       oversampling=grid.oversampling)

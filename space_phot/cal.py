@@ -45,8 +45,9 @@ def JWST_mag_to_flux(mag,imwcs,zpsys='ab',density=True):
     else:
         raise RuntimeError('Do not recognize zpsys')
     if density:
+        
         pixel_scale = astropy.wcs.utils.proj_plane_pixel_scales(imwcs)[0]  * imwcs.wcs.cunit[0].to('arcsec')
-
+        
         flux /=  ((pixel_scale * astropy.units.arcsec)**2).to(astropy.units.sr)
     
     return flux.value
@@ -58,14 +59,17 @@ def calibrate_HST_flux(flux,fluxerr,primary_header,sci_header):
     instrument = primary_header['DETECTOR']
     #flux/=primary_header['EXPTIME']
     #fluxerr/=primary_header['EXPTIME']
-    if instrument=='IR':
+    if instrument=='IR' and False:
         zp = hst_get_zp(primary_header['FILTER'],'ab')
     else:
         try:
             photflam = sci_header['PHOTFLAM']
         except:
             photflam = primary_header['PHOTFLAM']
-        photplam = sci_header['PHOTPLAM']
+        try:
+            photplam = sci_header['PHOTPLAM']
+        except:
+            photplam = primary_header['PHOTPLAM']
         zp = -2.5*np.log10(photflam)-5*np.log10(photplam)-2.408
 
     mag = -2.5*np.log10(flux)+zp
