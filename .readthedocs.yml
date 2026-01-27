@@ -8,13 +8,11 @@ build:
 sphinx:
   configuration: Docs/source/conf.py
 
-
-# Optionally set the version of Python and requirements required to build your docs
 python:
-  version: 3.11
   install:
-      - requirements: Docs/source/requirements.txt
-      - requirements: Docs/source/requirements2.txt
-      - method: pip
-        path: .
-
+    - requirements: Docs/source/requirements.txt
+    - requirements: Docs/source/requirements2.txt
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
