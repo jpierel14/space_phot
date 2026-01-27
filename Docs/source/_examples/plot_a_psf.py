@@ -24,8 +24,8 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 
 # Optional: network download
-RUN_NETWORK = os.environ.get("SPACE_PHOT_DOCS_NETWORK", "0") == "1"
-RUN_LEVEL3 = os.environ.get("SPACE_PHOT_DOCS_LEVEL3", "0") == "1"
+RUN_NETWORK = os.environ.get("SPACE_PHOT_DOCS_NETWORK", "1") == "1"
+RUN_LEVEL3 = os.environ.get("SPACE_PHOT_DOCS_LEVEL3", "1") == "1"
 
 import space_phot
 
@@ -38,7 +38,8 @@ import space_phot
 hst_obs_id = "hst_16264_12_wfc3_ir_f110w_iebc12"
 sn_hst = SkyCoord("21:29:40.2110", "+0:05:24.154", unit=(u.hourangle, u.deg))
 
-hst_files = sorted(glob.glob("mastDownload/HST/*/*flt.fits"))
+hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
+                            sn_hst)['F110W'])
 if (len(hst_files) == 0) and RUN_NETWORK:
     from astroquery.mast import Observations
 
@@ -107,8 +108,8 @@ print(obs_hst.psf_result.phot_cal_table)
 jwst_obs_id = "jw02767-o002_t001_nircam_clear-f150w"
 sn_jwst = SkyCoord("21:29:40.2103", "+0:05:24.158", unit=(u.hourangle, u.deg))
 
-jwst_files = sorted(glob.glob("mastDownload/JWST/*/*cal.fits"))
-if (len(jwst_files) == 0) and RUN_NETWORK:
+
+if RUN_NETWORK:
     from astroquery.mast import Observations
 
     obs_table = Observations.query_criteria(obs_id=jwst_obs_id)
@@ -124,7 +125,9 @@ if (len(jwst_files) == 0) and RUN_NETWORK:
     Observations.download_products(prods3, extension="fits")
     jwst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/JWST/*/*cal.fits"),
                             sn_jwst)['F150W'])
-
+else:
+    jwst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/JWST/*/*cal.fits"),
+                            sn_jwst)['F150W'])
 if len(jwst_files) == 0:
     raise RuntimeError(
         "No JWST files found. Either pre-download into mastDownload/ "
