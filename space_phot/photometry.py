@@ -1,24 +1,44 @@
+import os
+
 import numpy as np
 import astropy
+from astropy.coordinates import SkyCoord
+from astropy.wcs.utils import skycoord_to_pixel
+
+from stsci.skypac import pamutils
+
 import sncosmo
 import dynesty
 from dynesty import NestedSampler
 from dynesty import utils as dyfunc
 from dynesty.pool import Pool
-import dill
-import dynesty.utils
-import corner
+
 import photutils
-from collections import OrderedDict
-from copy import copy,deepcopy
+from photutils.psf import EPSFModel
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import os,sys
-from stsci.skypac import pamutils
 
-from .util import generic_aperture_phot,jwst_apcorr,jwst_apcorr_interp,hst_apcorr,simple_aperture_sum
-from .cal import calibrate_JWST_flux,calibrate_HST_flux,calc_jwst_psf_corr,calc_hst_psf_corr,\
-        JWST_mag_to_flux,HST_mag_to_flux
+from collections import OrderedDict
+from copy import copy, deepcopy
+
+from .util import (
+    generic_aperture_phot,
+    jwst_apcorr,
+    jwst_apcorr_interp,
+    hst_apcorr,
+    simple_aperture_sum,
+)
+
+from .cal import (
+    calibrate_JWST_flux,
+    calibrate_HST_flux,
+    calc_jwst_psf_corr,
+    calc_hst_psf_corr,
+    JWST_mag_to_flux,
+    HST_mag_to_flux,
+)
+
 
 #from .MIRIMBkgInterp import MIRIMBkgInterp
 
@@ -67,7 +87,7 @@ def prior_transform(parameters):
     
 
 def do_nest(args):
-    
+    import dill
     dynesty.utils.pickle_module = dill
     psf_model_list,wcs_list,vparam_names,xs,ys,fit_bkg,fluxes,fluxerrs,bounds,multi_flux,fit_radec,fit_pixel = args
     xb = []
@@ -91,84 +111,164 @@ class observation():
         pass
     
 
-    def fast_psf(self,psf_model,centers,psf_width=5,local_bkg=False,**kwargs):
+    def fast_psf(self, psf_model, centers, psf_width=5, local_bkg=False, **kwargs):
+        """
+        Fast PSF photometry wrapper around photutils.PSFPhotometry.
+
+        Parameters
+        ----------
+        psf_model : astropy.modeling.Model
+            PSF/PRF model (e.g., IntegratedGaussianPRF).
+        centers : array-like
+            Initial centers, shape (N, 2), in (y, x) pixel coordinates.
+        psf_width : int
+            Fit stamp size (also used as aperture_radius).
+        local_bkg : bool
+            If True, estimate a local background with MMMBackground.
+        **kwargs :
+            Passed through to PSFPhotometry call (currently unused, kept for API stability).
+
+        Returns
+        -------
+        phot : astropy.table.Table
+            Photutils output table with added calibrated columns: flux, fluxerr, mag, magerr, zp.
+        """
+        import numpy as np
+        import astropy
+        import photutils
+        from copy import deepcopy
+
+        # Choose local background estimator
         if local_bkg:
             from photutils.background import LocalBackground, MMMBackground
-
             bkgstat = MMMBackground()
-            localbkg_estimator = LocalBackground(psf_width, psf_width*2, bkgstat)
+            localbkg_estimator = LocalBackground(psf_width, psf_width * 2, bkgstat)
         else:
             localbkg_estimator = None
-        pos = astropy.table.Table(np.atleast_2d(centers),names=['y_0','x_0'])
-        daofind = photutils.detection.DAOStarFinder(threshold=5,fwhm=2,xycoords=np.array([pos['x_0'],pos['y_0']]).T)
-        self.psf_model_list = [psf_model]
-        psfphot = photutils.psf.PSFPhotometry(self.psf_model_list[0], psf_width, finder=daofind,
-                            aperture_radius=psf_width,localbkg_estimator=localbkg_estimator)
 
-        if self.pipeline_level==3:
-            phot = psfphot(self.data, error=self.err,init_params=pos)
+        # Photutils expects init_params table with x_0, y_0
+        centers = np.atleast_2d(centers)
+        init_params = astropy.table.Table(
+            {"y_0": centers[:, 0].astype(float), "x_0": centers[:, 1].astype(float)}
+        )
+
+        # Finder: you’re using DAOStarFinder in "forced coords" mode.
+        # Keep this behavior to avoid usability changes.
+        daofind = photutils.detection.DAOStarFinder(
+            threshold=5,
+            fwhm=2,
+            xycoords=np.column_stack([init_params["x_0"], init_params["y_0"]]),
+        )
+
+        psfphot = photutils.psf.PSFPhotometry(
+            psf_model,
+            fit_shape=psf_width,
+            finder=daofind,
+            aperture_radius=psf_width,
+            localbkg_estimator=localbkg_estimator,
+        )
+
+        # Select the correct frame WITHOUT mutating self
+        if self.pipeline_level == 3:
+            data = self.data
+            err = self.err
+            wcs = self.wcs
+            prim_header = self.prim_header
+            sci_header = self.sci_header
         else:
-            self.data = self.data_arr_pam[0]
-            self.wcs = self.wcs_list[0]
-            self.prim_header = self.prim_headers[0]
-            self.sci_header = self.sci_headers[0]
-            phot = psfphot(self.data, error=self.err_arr[0],init_params=pos)
-        
-        
+            # level2: first exposure (preserves your prior behavior)
+            data = self.data_arr_pam[0]
+            err = self.err_arr[0]
+            wcs = self.wcs_list[0]
+            prim_header = self.prim_headers[0]
+            sci_header = self.sci_headers[0]
+
+        # Run photutils PSF photometry
+        phot = psfphot(data, error=err, init_params=init_params)
+
+        # Build result container
         self.psf_result = sncosmo.utils.Result()
-        for key in psfphot.fit_results.keys():
-            self.psf_result[key] = psfphot.fit_results[key]
-
-        
-        
-        
-        
-        all_mflux_arr = []
-        all_resid_arr = []
-        all_data_arr = []
-        #i = 0
-        cutouts = []
-        for i in range(len(phot)):
-            slc_lg, _ = astropy.nddata.overlap_slices(self.data.shape, [psf_width,psf_width],  
-                                       [phot[i]['y_fit'],phot[i]['x_fit']], mode='trim')
-            yy, xx = np.mgrid[slc_lg]
-            if 'local_bkg' in phot[i].keys():
-                bkg = np.ones(self.data[yy,xx].shape)*phot[i]['local_bkg']
-            else:
-                bkg = np.zeros(self.data[yy,xx].shape)
-            all_data_arr.append(self.data[yy,xx]-bkg)
-            self.psf_model_list[0].x_0 = phot[i]['x_fit']
-            self.psf_model_list[0].y_0 = phot[i]['y_fit']
-            self.psf_model_list[0].flux = phot[i]['flux_fit']
-
-        #self.psf_result['best'] = [phot[i]['x_fit'],phot[i]['y_fit'],phot[i]['flux_fit']]
-        #self.psf_result['errors'] = {vparam_names[j]:psfphot.fit_results['fit_param_errs'][i][j] for j in range(npar)} #np.sqrt(psfphot.fit_results['fit_infos'][i]['param_cov'][j][j])
-            mflux = self.psf_model_list[0](xx,yy)
-
-            all_mflux_arr.append(mflux)
-
-        #mflux*=self.pams[i][posx,posy]
-            all_resid_arr.append(all_data_arr[-1]-all_mflux_arr[-1])
-            #try:
-            #    resid = self.psf_result['fit_residuals'][i].reshape((psf_width,psf_width))#fluxes[i]-mflux 
-            #except:
-            #    resid = np.zeros((psf_width,psf_width))
-            #all_resid_arr.append(resid)
-        self.psf_result['psf_arr'] = all_mflux_arr
-        self.psf_result['resid_arr'] = all_resid_arr
-        self.psf_result['data_arr'] = all_data_arr
         self.psf_result.phot_table = phot
-        if self.telescope.lower()=='jwst':
-            flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(phot['flux_fit'],phot['flux_err'],self.wcs)
+
+        # Store the key fit outputs in a stable way
+        for col in ["x_fit", "y_fit", "flux_fit", "flux_err", "local_bkg"]:
+            if col in phot.colnames:
+                self.psf_result[col] = phot[col]
+
+        # Generate model/data/residual cutouts for quick inspection
+        all_mflux_arr, all_resid_arr, all_data_arr = [], [], []
+        psf_arr, resid_arr, data_arr = [], [], []
+
+        # Use a local model copy so we don't permanently mutate psf_model
+        try:
+            model_template = psf_model.copy()
+        except Exception:
+            model_template = deepcopy(psf_model)
+
+        for row in phot:
+            # Guard: if fit columns are missing, skip cutout generation gracefully
+            if ("x_fit" not in phot.colnames) or ("y_fit" not in phot.colnames) or ("flux_fit" not in phot.colnames):
+                break
+
+            y0 = float(row["y_fit"])
+            x0 = float(row["x_fit"])
+
+            slc_lg, _ = astropy.nddata.overlap_slices(
+                data.shape, (psf_width, psf_width), (y0, x0), mode="trim"
+            )
+            yy, xx = np.mgrid[slc_lg]
+
+            if "local_bkg" in phot.colnames:
+                bkg = np.ones_like(data[yy, xx], dtype=float) * float(row["local_bkg"])
+            else:
+                bkg = np.zeros_like(data[yy, xx], dtype=float)
+
+            stamp = data[yy, xx] - bkg
+
+            # Evaluate model on the same grid
+            try:
+                m = model_template.copy()
+            except Exception:
+                m = deepcopy(model_template)
+
+            # Set parameters
+            if hasattr(m, "x_0"):
+                m.x_0 = x0
+            if hasattr(m, "y_0"):
+                m.y_0 = y0
+            if hasattr(m, "flux"):
+                m.flux = float(row["flux_fit"])
+
+            mflux = m(xx, yy)
+
+            psf_arr.append(mflux)
+            data_arr.append(stamp)
+            resid_arr.append(stamp - mflux)
+
+        self.psf_result["psf_arr"] = psf_arr
+        self.psf_result["data_arr"] = data_arr
+        self.psf_result["resid_arr"] = resid_arr
+
+        # Calibrate fluxes/mags
+        if self.telescope.lower() == "jwst":
+            flux, fluxerr, mag, magerr, zp = calibrate_JWST_flux(
+                phot["flux_fit"], phot["flux_err"], wcs
+            )
         else:
-            flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(phot['flux_fit'],phot['flux_err'],self.prim_header,self.sci_header)
-        phot['flux'] = flux
-        phot['fluxerr'] = fluxerr
-        phot['mag'] = mag
-        phot['magerr'] = magerr
-        phot['zp'] = zp
+            flux, fluxerr, mag, magerr, zp = calibrate_HST_flux(
+                phot["flux_fit"], phot["flux_err"], prim_header, sci_header
+            )
+
+        # Attach calibrated columns
+        phot["flux"] = flux
+        phot["fluxerr"] = fluxerr
+        phot["mag"] = mag
+        phot["magerr"] = magerr
+        phot["zp"] = zp
+
         self.psf_result.phot_cal_table = phot
         return phot
+
 
     def nest_psf(self,vparam_names, bounds,fluxes, fluxerrs,xs,ys,cutout_big=None,psf_width=7,use_MLE=False,
                        minsnr=0., priors=None, ppfs=None, npoints=100, method='single',center_weight=20,
@@ -1146,6 +1246,7 @@ class observation3(observation):
             (100*np.nanmedian([np.nansum(self.psf_result.resid_arr[i])/\
                 np.nansum(self.psf_result.data_arr[i]) for i in range(self.n_exposures)]))+'%')
 
+        return self.psf_result
 
     def create_psf_subtracted(self,sci_ext=1,fname=None):
         """
@@ -1193,139 +1294,258 @@ class observation3(observation):
         temp.close()
         return self.fname.replace('.fits','_resid.fits')
 
-    def aperture_photometry(self,sky_location,xy_positions=None,
-                radius=None,encircled_energy=None,skyan_in=None,skyan_out=None,
-                alternate_ref=None,radius_in_arcsec=False):
+    def aperture_photometry(
+        self,
+        sky_location,
+        xy_positions=None,
+        radius=None,
+        encircled_energy=None,
+        skyan_in=None,
+        skyan_out=None,
+        alternate_ref=None,
+        radius_in_arcsec=False,
+    ):
         """
-        We do not provide a PSF photometry method for level 3 data, but aperture photometry is possible.
+        Perform aperture photometry on a single drizzled (level 3) image.
+
+        This uses :func:`space_phot.util.generic_aperture_phot` together with
+        the appropriate HST/JWST aperture corrections and flux calibration.
 
         Parameters
         ----------
-        sky_location : :class:`~astropy.coordinates.SkyCoord`
-            The location of your source
-        xy_positions : list
-            The xy position of your source (will be used in place of sky_location)
-        radius : float
-            Needed for HST observations to define the aperture radius
-        encircled_energy: int
-            Multiple of 10 to define the JWST aperture information
-        skyan_in : float
-            For HST, defines the inner radius of the background sky annulus
-        skyan_out : float
-            For HST, defines the outer radius of the background sky annulus
+        sky_location : astropy.coordinates.SkyCoord
+            Sky coordinate of the source. Ignored if ``xy_positions`` is given.
+        xy_positions : array_like, optional
+            One or more (x, y) pixel positions. If provided, these override
+            ``sky_location``.
+        radius : float, optional
+            Aperture radius in pixels (or arcsec if ``radius_in_arcsec=True``).
+            Required for HST. For JWST this may be omitted if
+            ``encircled_energy`` is supplied.
+        encircled_energy : int or str, optional
+            For JWST only. Encircled-energy value (e.g. 70 for 70 percent) to
+            use when querying the JWST aperture-correction reference files.
+        skyan_in, skyan_out : float, optional
+            Inner and outer radii of the background annulus in pixels. If not
+            provided, sensible defaults are chosen based on the aperture size
+            (or JWST reference file if available).
+        alternate_ref : str, optional
+            Optional alternate reference file to pass through to the JWST
+            aperture-correction helper.
+        radius_in_arcsec : bool, optional
+            If True, ``radius``, ``skyan_in``, and ``skyan_out`` are interpreted
+            as arcsec and converted to pixels using ``self.pixel_scale``.
 
         Returns
         -------
-        aperture_result
+        aperture_result : sncosmo.utils.Result
+            Result object with the following attributes:
+                * ``radius`` – aperture radius in pixels
+                * ``ee`` – encircled energy (JWST only; None for HST)
+                * ``apcorr`` – aperture correction factor
+                * ``sky_an`` – dict with the sky annulus radii
+                * ``phot_table`` – raw photometry table
+                * ``phot_cal_table`` – calibrated photometry table
         """
-        assert radius is not None or encircled_energy is not None, 'Must supply radius or ee'
-        assert (self.telescope.lower()=='jwst') or (self.telescope.lower()=='hst' and radius is not None),'Must supply radius for hst'
+        # Basic parameter validation
+        if radius is None and encircled_energy is None:
+            raise ValueError("Must supply either 'radius' or 'encircled_energy'.")
 
+        if self.telescope.lower() == "hst" and radius is None:
+            raise ValueError("For HST data you must supply an aperture 'radius'.")
+
+        # Normalise EE input for JWST
+        ee = None
+        if encircled_energy is not None:
+            ee = int(encircled_energy)
+
+        # Helper for arcsec → pixels
+        def _to_pixels(val):
+            if val is None:
+                return None
+            return float(val) / float(self.pixel_scale)
+
+        # Convert radii from arcsec to pixels if requested
         if radius_in_arcsec:
-            radius /= self.pixel_scale
-        result = {'pos_x':[],'pos_y':[],'aper_bkg':[],'aperture_sum':[],'aperture_sum_err':[],
-                  'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
-        result_cal = {'flux':[],'fluxerr':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[],'mjd':[]}
+            radius = _to_pixels(radius)
+            skyan_in = _to_pixels(skyan_in)
+            skyan_out = _to_pixels(skyan_out)
 
+        # Build result containers
+        result = {
+            "pos_x": [],
+            "pos_y": [],
+            "aper_bkg": [],
+            "aperture_sum": [],
+            "aperture_sum_err": [],
+            "aper_sum_corrected": [],
+            "aper_sum_bkgsub": [],
+            "annulus_median": [],
+            "exp": [],
+        }
+        result_cal = {
+            "flux": [],
+            "fluxerr": [],
+            "filter": [],
+            "zp": [],
+            "mag": [],
+            "magerr": [],
+            "zpsys": [],
+            "exp": [],
+            "mjd": [],
+        }
+
+        # Source positions
         if xy_positions is None:
             try:
-                positions = np.atleast_2d(list(zip(*astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))))
-            except:
-                positions = np.atleast_2d(astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs))
+                x, y = astropy.wcs.utils.skycoord_to_pixel(sky_location, self.wcs)
+                positions = np.atleast_2d(np.column_stack([x, y]))
+            except Exception:
+                positions = np.atleast_2d(
+                    astropy.wcs.utils.skycoord_to_pixel(sky_location, self.wcs)
+                )
         else:
             positions = np.atleast_2d(xy_positions)
-        if self.telescope=='JWST':
-            if encircled_energy is not None:
-                apres = jwst_apcorr(self.fname,encircled_energy,
-                    alternate_ref=alternate_ref)
+
+        # Instrument-specific aperture parameters
+        apcorr = 1.0
+        sky_in_pix = skyan_in
+        sky_out_pix = skyan_out
+
+        if self.telescope.upper() == "JWST":
+            # JWST: aperture correction lookup/interp
+            if ee is not None:
+                apres = jwst_apcorr(self.fname, ee, alternate_ref=alternate_ref)
                 if apres is None:
-                    print('Failed to get aperture correction with your radius choice.')
-                    return
-                else:
-                    radius,apcorr,skyan_in,skyan_out = apres
+                    raise RuntimeError(f"Failed JWST aperture correction for EE={ee}.")
+                
+                # jwst_apcorr returns PIXELS (not arcsec)
+                radius_pix, apcorr, ref_sky_in_pix, ref_sky_out_pix = apres
+
+                radius = float(radius_pix)
+                if sky_in_pix is None:
+                    sky_in_pix = float(ref_sky_in_pix)
+                if sky_out_pix is None:
+                    sky_out_pix = float(ref_sky_out_pix)
+
             else:
-                apres = jwst_apcorr_interp(self.fname,radius,
-                    alternate_ref=alternate_ref)
+                # jwst_apcorr_interp expects radius in PIXELS
+                apres = jwst_apcorr_interp(self.fname, float(radius), alternate_ref=alternate_ref)
                 if apres is None:
-                    print('Failed to get aperture correction with your radius choice.')
-                    return
-                else:
-                    encircled_energy,apcorr,skyan_in,skyan_out = apres
-            epadu = self.sci_header['XPOSURE']*self.sci_header['PHOTMJSR']
+                    raise RuntimeError(
+                        f"Failed JWST aperture correction interpolation for radius={radius} px."
+                    )
+
+                ee, apcorr, ref_sky_in_pix, ref_sky_out_pix = apres
+                if sky_in_pix is None:
+                    sky_in_pix = float(ref_sky_in_pix)
+                if sky_out_pix is None:
+                    sky_out_pix = float(ref_sky_out_pix)
+
+            # For JWST: noise-scale factor for the aperture-phot error model
+            # (keep your existing behavior here)
+            epadu = self.sci_header.get("XPOSURE", 1.0) * self.sci_header.get("PHOTMJSR", 1.0)
+
 
         else:
-            if self.sci_header['BUNIT']=='ELECTRON':
-                epadu = 1
+            # HST
+            if self.sci_header.get("BUNIT", "").upper() == "ELECTRON":
+                epadu = 1.0
             else:
-                epadu = self.prim_header['EXPTIME']
-            px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs)[0] *\
-                                                                         self.wcs.wcs.cunit[0].to('arcsec')
-            apcorr = hst_apcorr(radius*px_scale,self.filter,self.instrument)[0]
-            if skyan_in is None:
-                skyan_in = radius*3
-            if skyan_out is None:
-                skyan_out = radius*4
+                epadu = self.prim_header.get("EXPTIME", 1.0)
 
-        sky = {'sky_in':skyan_in,'sky_out':skyan_out}
-        phot = generic_aperture_phot(self.data,positions,radius,sky,error=self.err,
-                                            epadu=epadu)
+            px_scale = (
+                astropy.wcs.utils.proj_plane_pixel_scales(self.wcs)[0]
+                * self.wcs.wcs.cunit[0].to("arcsec")
+            )
+            # hst_apcorr expects radius in arcsec
+            apcorr_arr = hst_apcorr(radius * px_scale, self.filter, self.instrument)
+            try:
+                apcorr = float(apcorr_arr[0])
+            except Exception:
+                apcorr = float(apcorr_arr)
 
-        for k in phot.keys():
-            if k in result.keys():
-                result[k] = phot[k]
-        result['pos_x'] = [positions[i][0] for i in range(len(positions))]
-        result['pos_y'] = [positions[i][1] for i in range(len(positions))]
-        
-        if self.telescope.lower()=='jwst':
-            result['aper_sum_corrected'] = np.array(phot['aper_sum_bkgsub'] * apcorr)
-            result['aperture_sum_err']*= apcorr
+            if sky_in_pix is None:
+                sky_in_pix = radius * 3.0
+            if sky_out_pix is None:
+                sky_out_pix = radius * 4.0
+
+        sky = {"sky_in": sky_in_pix, "sky_out": sky_out_pix}
+
+        # Run the generic aperture photometry
+        phot = generic_aperture_phot(
+            self.data,
+            positions,
+            radius=radius,
+            sky=sky,
+            epadu=epadu,
+            error=self.err,
+        )
+
+        # Fill result (raw aperture quantities)
+        result["pos_x"] = np.array(positions[:, 0])
+        result["pos_y"] = np.array(positions[:, 1])
+        result["aper_bkg"] = np.array(phot["aper_bkg"])
+        result["aperture_sum"] = np.array(phot["aperture_sum"])
+        if "aperture_sum_err" in phot.colnames:
+            result["aperture_sum_err"] = np.array(phot["aperture_sum_err"])
         else:
-            result['aper_sum_corrected'] = np.array(phot['aper_sum_bkgsub'] / apcorr)
-            result['aperture_sum_err']/= apcorr
-        result['exp'] = [os.path.basename(self.fname)]*len(phot)
+            result["aperture_sum_err"] = np.zeros(len(phot))
+        result["aper_sum_bkgsub"] = np.array(phot["aper_sum_bkgsub"])
+        result["annulus_median"] = np.array(phot["annulus_median"])
+        result["exp"] = [os.path.basename(self.fname)] * len(phot)
 
-        if self.telescope=='JWST':
-            flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(np.array(result['aper_sum_corrected']),
-                                                          np.array(result['aperture_sum_err']),
-                                                          self.wcs,flux_units=self.flux_units)
-            mjd = self.sci_header['MJD-AVG']
+        # Apply aperture correction
+        result["aper_sum_corrected"] = result["aper_sum_bkgsub"] / apcorr
+        result["aperture_sum_err"] = result["aperture_sum_err"] / apcorr
+
+        # Flux calibration
+        if self.telescope.upper() == "JWST":
+            flux, fluxerr, mag, magerr, zp = calibrate_JWST_flux(
+                np.array(result["aper_sum_corrected"]),
+                np.array(result["aperture_sum_err"]),
+                self.wcs,
+                flux_units=self.flux_units,
+            )
+            mjd = self.sci_header.get("MJD-AVG", np.nan)
         else:
-            flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(np.array(result['aper_sum_corrected']),
-                                                          np.array(result['aperture_sum_err']),
-                                                          self.prim_header,
-                                                          self.sci_header)
-            mjd = np.median([self.prim_header['EXPSTART'],self.prim_header['EXPEND']])
-        if isinstance(flux,float):
-            result_cal['flux'] = [flux]
-            result_cal['fluxerr'] = [fluxerr]
-            result_cal['mag'] = [mag]
-            result_cal['magerr'] = [magerr]
-            result_cal['zp'] = [zp]
+            flux, fluxerr, mag, magerr, zp = calibrate_HST_flux(
+                np.array(result["aper_sum_corrected"]),
+                np.array(result["aperture_sum_err"]),
+                self.prim_header,
+                self.sci_header,
+            )
+            mjd = self.sci_header.get("MJD-AVG", self.prim_header.get("MJD-AVG", np.nan))
 
+        # Fill calibrated result
+        result_cal["flux"] = np.atleast_1d(flux).tolist()
+        result_cal["fluxerr"] = np.atleast_1d(fluxerr).tolist()
+        result_cal["mag"] = np.atleast_1d(mag).tolist()
+        result_cal["magerr"] = np.atleast_1d(magerr).tolist()
+        result_cal["filter"] = [self.filter] * len(result_cal["flux"])
+        result_cal["zpsys"] = ["ab"] * len(result_cal["flux"])
+
+        # zp may be scalar or array-like
+        if np.ndim(zp) == 0:
+            result_cal["zp"] = [float(zp)] * len(result_cal["flux"])
         else:
-            result_cal['flux'] = flux
-            result_cal['fluxerr'] = fluxerr
-            result_cal['mag'] = mag
-            result_cal['magerr'] = magerr
-            if isinstance(zp,float):
-                result_cal['zp'] = [zp]
-            else:
-                result_cal['zp'] = zp
+            result_cal["zp"] = np.atleast_1d(zp).tolist()
 
-        result_cal['filter'] = [self.filter]*len(phot)
-        result_cal['zpsys'] = ['ab']*len(phot)
-        result_cal['exp'] = [os.path.basename(self.fname)]*len(phot)
-        result_cal['mjd'] = [mjd]*len(phot)
-        
-        res = sncosmo.utils.Result(radius=radius,
-                   ee=encircled_energy,
-                   apcorr=apcorr,
-                   sky_an=sky,
-                   phot_table=astropy.table.Table(result),
-                   phot_cal_table=astropy.table.Table(result_cal)
-                   )
+        result_cal["exp"] = [os.path.basename(self.fname)] * len(result_cal["flux"])
+        result_cal["mjd"] = [mjd] * len(result_cal["flux"])
+
+        # Wrap in a sncosmo Result object for backwards compatibility
+        res = sncosmo.utils.Result(
+            radius=radius,
+            ee=ee,
+            apcorr=apcorr,
+            sky_an=sky,
+            phot_table=astropy.table.Table(result),
+            phot_cal_table=astropy.table.Table(result_cal),
+        )
         self.aperture_result = res
-        return 
+        return res
+ 
 
     def plant_psf(self,psf_model,plant_locations,magnitudes,out_fname=None):
         """
@@ -1453,7 +1673,18 @@ class observation2(observation):
                  pamutils.pam_from_file(fname, ('sci', sci_ext), 'temp_pam.fits')
                  self.pams.append(astropy.io.fits.open('temp_pam.fits')[0].data)
             os.remove('temp_pam.fits')
-        
+        try:
+            self.flux_units = astropy.units.Unit(self.sci_headers[0]['BUNIT'])
+        except:
+            try:
+                self.flux_units = astropy.units.Unit(self.prim_headers[0]['BUNIT'])
+            except:
+                if self.telescope=='JWST':
+                    print('Cannot create flux_units from header...assuming MJy/sr')
+                    self.flux_units = astropy.units.MJy/astropy.units.sr
+                else:
+                    print('Cannot create flux_units from header...assuming electrons')
+                    self.flux_units = astropy.units.electron
         self.data_arr_pam = [im*pam for im,pam in zip(self.data_arr,self.pams)]
         self.px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs_list[0])[0] *\
                                                     self.wcs_list[0].wcs.cunit[0].to('arcsec')
@@ -1596,122 +1827,272 @@ class observation2(observation):
     
 
 
-    def aperture_photometry(self,sky_location,xy_positions=None,
-                radius=None,encircled_energy=None,skyan_in=None,skyan_out=None,radius_in_arcsec=False):
+    def aperture_photometry(
+        self,
+        sky_location,
+        xy_positions=None,
+        radius=None,
+        encircled_energy=None,
+        skyan_in=None,
+        skyan_out=None,
+    ):
         """
-        Aperture photometry class for level 2 data
+        Aperture photometry for level 2 data (per exposure).
 
         Parameters
         ----------
-        sky_location : :class:`~astropy.coordinates.SkyCoord`
-            The location of your source
-        xy_positions : list
-            The xy position of your source (will be used in place of sky_location)
-        radius : float
-            Needed for HST observations to define the aperture radius
-        encircled_energy: int
-            Multiple of 10 to define the JWST aperture information
-        skyan_in : float
-            For HST, defines the inner radius of the background sky annulus
-        skyan_out : float
-            For HST, defines the outer radius of the background sky annulus
+        sky_location : astropy.coordinates.SkyCoord
+            Sky position of the source. Used if xy_positions is not given.
+        xy_positions : (x, y) or array_like, optional
+            Pixel positions of the source. If a single (x, y) pair is given,
+            it is used for all exposures. If an array/list of shape
+            (n_exposures, 2) is given, the ith row is used for the ith exposure.
+        radius : float, optional
+            Aperture radius in pixels. Required for HST.
+        encircled_energy : int, optional
+            For JWST, encircled-energy value (e.g. 70) to define the aperture.
+        skyan_in : float, optional
+            Inner radius of the sky annulus in pixels. If None, a default is used.
+        skyan_out : float, optional
+            Outer radius of the sky annulus in pixels. If None, a default is used.
 
         Returns
         -------
-        aperture_result
+        aperture_result : sncosmo.utils.Result
+            Result object with raw and calibrated photometry tables.
         """
-        assert radius is not None or encircled_energy is not None, 'Must supply radius or ee'
-        assert (self.telescope.lower()=='jwst') or (self.telescope.lower()=='hst' and radius is not None),'Must supply radius for hst'
+        import warnings
+        from astropy.wcs.utils import skycoord_to_pixel, proj_plane_pixel_scales
+        from astropy.coordinates import SkyCoord
 
-        if radius_in_arcsec:
-            radius /= self.pixel_scale
+        # Basic sanity: must provide radius for HST or EE for JWST
+        assert radius is not None or encircled_energy is not None, \
+            "Must supply radius or encircled_energy"
+        assert (
+            (self.telescope.lower() == "hst" and radius is not None)
+            or (self.telescope.lower() == "jwst" and encircled_energy is not None)
+        ), "Must supply radius for HST or encircled_energy for JWST"
 
-        result = {'pos_x':[],'pos_y':[],'aper_bkg':[],'aperture_sum':[],'aperture_sum_err':[],
-                  'aper_sum_corrected':[],'aper_sum_bkgsub':[],'annulus_median':[],'exp':[]}
-        result_cal = {'flux':[],'fluxerr':[],'filter':[],'zp':[],'mag':[],'magerr':[],'zpsys':[],'exp':[],'mjd':[]}
-        for i in range(self.n_exposures):
+        # Containers for per-exposure raw photometry
+        result = {
+            "pos_x": [],
+            "pos_y": [],
+            "aper_bkg": [],
+            "aperture_sum": [],
+            "aperture_sum_err": [],
+            "aper_sum_corrected": [],
+            "aper_sum_bkgsub": [],
+            "annulus_median": [],
+            "exp": [],
+        }
+
+        # Containers for per-exposure calibrated photometry
+        result_cal = {
+            "flux": [],
+            "fluxerr": [],
+            "filter": [],
+            "zp": [],
+            "mag": [],
+            "magerr": [],
+            "zpsys": [],
+            "exp": [],
+            "mjd": [],
+        }
+
+        # Helper to get positions for each exposure
+        def _get_positions_for_exposure(i):
             if xy_positions is None:
-                positions = np.atleast_2d(astropy.wcs.utils.skycoord_to_pixel(sky_location,self.wcs_list[i]))
-            else:
-                positions = np.atleast_2d(xy_positions)
-            if self.telescope=='JWST':
-                if encircled_energy is not None:
-                    apres = jwst_apcorr(self.exposure_fnames[i],encircled_energy)
-                    if apres is None:
-                        print('Failed to get aperture correction with your radius choice.')
-                        return
-                    else:
-                        radius,apcorr,skyan_in,skyan_out = apres
+                sc = sky_location
+                # Handle scalar vs sequence SkyCoord
+                if isinstance(sc, SkyCoord) and not sc.isscalar:
+                    sc = sc[i]
+                elif not isinstance(sc, SkyCoord) and hasattr(sc, "__len__"):
+                    sc = sc[i]
+                x, y = skycoord_to_pixel(sc, self.wcs_list[i])
+                return np.atleast_2d([x, y])
 
-                else:
-                    apres = jwst_apcorr_interp(self.exposure_fnames[i],radius)
-                    if apres is None:
-                        print('Failed to get aperture correction with your radius choice.')
-                        return
-                    else:
-                        encircled_energy,apcorr,skyan_in,skyan_out = apres
-                
-                epadu = self.sci_headers[i]['XPOSURE']*self.sci_headers[i]['PHOTMJSR']
+            xy = np.array(xy_positions, dtype=float)
+
+            # Single (x, y) for all exposures
+            if xy.ndim == 1 and xy.shape[0] == 2:
+                return np.atleast_2d(xy)
+
+            # One (x, y) per exposure
+            return np.atleast_2d(xy[i])
+
+        # Loop over exposures
+        for i in range(self.n_exposures):
+            positions = _get_positions_for_exposure(i)
+
+            # --- Instrument-specific setup ---
+            if self.telescope.upper() == "JWST":
+                if encircled_energy is None:
+                    raise AssertionError(
+                        "encircled_energy must be supplied for JWST level-2 data"
+                    )
+
+                try:
+                    # jwst_apcorr returns radii and apcorr appropriate for this data;
+                    # we do NOT try to re-interpret the units here.
+                    radius_i, apcorr, sky_in_i, sky_out_i = jwst_apcorr(
+                        self.exposure_fnames[i], encircled_energy
+                    )
+                except Exception as exc:
+                    warnings.warn(
+                        f"jwst_apcorr failed for {self.exposure_fnames[i]} "
+                        f"({type(exc).__name__}: {exc}). "
+                        "Falling back to apcorr=1 and simple sky annulus."
+                    )
+                    radius_i = radius if radius is not None else 3.0
+                    apcorr = 1.0
+                    sky_in_i = skyan_in if skyan_in is not None else radius_i * 3.0
+                    sky_out_i = skyan_out if skyan_out is not None else radius_i * 4.0
+
+                # Ensure scalar radii
+                radius_i = float(np.atleast_1d(radius_i)[0])
+                sky_in_i = float(np.atleast_1d(sky_in_i)[0])
+                sky_out_i = float(np.atleast_1d(sky_out_i)[0])
+
+                if radius_i <= 0:
+                    raise ValueError("Aperture radius must be positive for JWST")
+
+                # epadu-like scaling; matches existing JWST L2 logic
+                xposure = self.sci_headers[i]["XPOSURE"] \
+                    if hasattr(self.sci_headers[i], "__getitem__") and "XPOSURE" in self.sci_headers[i] \
+                    else 1.0
+                photmjsr = self.sci_headers[i]["PHOTMJSR"] \
+                    if hasattr(self.sci_headers[i], "__getitem__") and "PHOTMJSR" in self.sci_headers[i] \
+                    else 1.0
+                epadu = xposure * photmjsr
+
             else:
-                if self.sci_headers[i]['BUNIT']=='ELECTRON':
-                    epadu = 1
+                # HST branch
+                radius_i = float(radius)
+                if radius_i <= 0:
+                    raise ValueError("Aperture radius must be positive for HST")
+
+                # BUNIT may not exist; treat missing as non-electron units
+                try:
+                    bunit = self.sci_headers[i]["BUNIT"].upper()
+                except Exception:
+                    bunit = ""
+
+                if bunit in ["ELECTRON", "ELECTRONS"]:
+                    epadu = 1.0
                 else:
-                    epadu = self.prim_headers[i]['EXPTIME']
-                px_scale = astropy.wcs.utils.proj_plane_pixel_scales(self.wcs_list[0])[0] *\
-                                                                             self.wcs_list[0].wcs.cunit[0].to('arcsec')
-                apcorr = hst_apcorr(radius*px_scale,self.filter,self.instrument)
+                    try:
+                        epadu = float(self.prim_headers[i]["EXPTIME"])
+                    except Exception:
+                        epadu = 1.0
+
+                px_scale = (
+                    proj_plane_pixel_scales(self.wcs_list[i])[0]
+                    * self.wcs_list[i].wcs.cunit[0].to("arcsec")
+                )
+                apcorr_arr = hst_apcorr(radius_i * px_scale, self.filter, self.instrument)
+                try:
+                    apcorr = float(apcorr_arr[0])
+                except Exception:
+                    apcorr = float(apcorr_arr)
+
                 if skyan_in is None:
-                    skyan_in = radius*3
+                    sky_in_i = radius_i * 3.0
+                else:
+                    sky_in_i = float(skyan_in)
+
                 if skyan_out is None:
-                    skyan_out = radius*4
+                    sky_out_i = radius_i * 4.0
+                else:
+                    sky_out_i = float(skyan_out)
 
-            sky = {'sky_in':skyan_in,'sky_out':skyan_out}
-            phot = generic_aperture_phot(self.data_arr_pam[i],positions,radius,sky,error=self.err_arr[i],
-                                                epadu=epadu)
-            for k in phot.keys():
-                if k in result.keys():
-                    result[k].append(float(phot[k]))
-            result['pos_x'].append(positions[0][0])
-            result['pos_y'].append(positions[0][1])
-            if self.telescope.lower()=='jwst':
-                result['aper_sum_corrected'].append(float(phot['aper_sum_bkgsub'] * apcorr))
-                result['aperture_sum_err'][-1]*= apcorr
+            sky = {"sky_in": sky_in_i, "sky_out": sky_out_i}
+
+            # --- Raw aperture photometry ---
+            phot = generic_aperture_phot(
+                self.data_arr_pam[i],
+                positions,
+                radius_i,
+                sky,
+                error=self.err_arr[i],
+                epadu=epadu,
+            )
+
+            # Fill raw result
+            result["pos_x"].append(float(positions[0][0]))
+            result["pos_y"].append(float(positions[0][1]))
+            result["aper_bkg"].append(float(phot["aper_bkg"]))
+            result["aperture_sum"].append(float(phot["aperture_sum"]))
+            result["aperture_sum_err"].append(
+                float(phot["aperture_sum_err"]) if "aperture_sum_err" in phot.colnames else 0.0
+            )
+            result["aper_sum_bkgsub"].append(float(phot["aper_sum_bkgsub"]))
+            result["annulus_median"].append(float(phot["annulus_median"]))
+            expname = os.path.basename(self.exposure_fnames[i])
+            result["exp"].append(expname)
+
+            # Apply aperture correction
+            if self.telescope.lower() == "jwst":
+                corr = float(phot["aper_sum_bkgsub"] * apcorr)
+                err_corr = result["aperture_sum_err"][-1] * apcorr
             else:
-                result['aper_sum_corrected'].append(float(phot['aper_sum_bkgsub'] / apcorr))
-                result['aperture_sum_err'][-1]/= apcorr
-            result['exp'].append(os.path.basename(self.exposure_fnames[i]))
+                corr = float(phot["aper_sum_bkgsub"] / apcorr)
+                err_corr = result["aperture_sum_err"][-1] / apcorr
 
-            if self.telescope=='JWST':
-                flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(result['aper_sum_corrected'][-1],
-                                                              result['aperture_sum_err'][-1],
-                                                              self.wcs_list[i])
+            result["aper_sum_corrected"].append(corr)
+            result["aperture_sum_err"][-1] = err_corr
+
+            # --- Calibrate to physical flux / magnitudes ---
+            if self.telescope.upper() == "JWST":
+                flux_arr, fluxerr_arr, mag_arr, magerr_arr, zp = calibrate_JWST_flux(
+                    np.array([corr]),
+                    np.array([err_corr]),
+                    self.wcs_list[i],
+                    flux_units=self.flux_units,
+                )
+                # MJD-AVG may or may not exist; if not, just set NaN
+                try:
+                    mjd = float(self.sci_headers[i]["MJD-AVG"])
+                except Exception:
+                    mjd = np.nan
             else:
-                flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(result['aper_sum_corrected'][-1],
-                                                              result['aperture_sum_err'][-1],
-                                                              self.prim_headers[i],
-                                                              self.sci_headers[i])
-            try:
-                result_cal['mjd'].append(self.sci_headers[i]['MJD-AVG'])
-            except:
-                result_cal['mjd'].append(self.prim_headers[i]['EXPSTART'])
-            result_cal['flux'].append(flux)
-            result_cal['fluxerr'].append(fluxerr)
-            result_cal['mag'].append(mag)
-            result_cal['magerr'].append(magerr)
-            result_cal['filter'].append(self.filter)
-            result_cal['zp'].append(zp)
-            result_cal['zpsys'].append('ab')
-            result_cal['exp'].append(os.path.basename(self.exposure_fnames[i]))
+                flux_arr, fluxerr_arr, mag_arr, magerr_arr, zp = calibrate_HST_flux(
+                    np.array([corr]),
+                    np.array([err_corr]),
+                    self.prim_headers[i],
+                    self.sci_headers[i],
+                )
+                # Prefer primary EXPSTART; fall back to NaN
+                try:
+                    mjd = float(self.prim_headers[i]["EXPSTART"])
+                except Exception:
+                    mjd = np.nan
 
+            flux = float(np.atleast_1d(flux_arr)[0])
+            fluxerr = float(np.atleast_1d(fluxerr_arr)[0])
+            mag = float(np.atleast_1d(mag_arr)[0])
+            magerr = float(np.atleast_1d(magerr_arr)[0])
 
-        res = sncosmo.utils.Result(radius=radius,
-                   ee=encircled_energy,
-                   apcorr=apcorr,
-                   sky_an=sky,
-                   phot_table=astropy.table.Table(result),
-                   phot_cal_table=astropy.table.Table(result_cal)
-                   )
+            result_cal["flux"].append(flux)
+            result_cal["fluxerr"].append(fluxerr)
+            result_cal["mag"].append(mag)
+            result_cal["magerr"].append(magerr)
+            result_cal["filter"].append(self.filter)
+            result_cal["zp"].append(zp)
+            result_cal["zpsys"].append("ab")
+            result_cal["exp"].append(expname)
+            result_cal["mjd"].append(mjd)
+
+        res = sncosmo.utils.Result(
+            radius=radius,
+            apcorr=apcorr,
+            sky_an={"sky_in": sky_in_i, "sky_out": sky_out_i},
+            phot_table=astropy.table.Table(result),
+            phot_cal_table=astropy.table.Table(result_cal),
+        )
         self.aperture_result = res
+        return res
+
+
 
     def psf_photometry(self,psf_model,sky_location=None,xy_positions=[],fit_width=None,background=None,
                         fit_flux='single',fit_centroid='pixel',fit_bkg=False,bounds={},npoints=100,use_MLE=False,
@@ -2068,7 +2449,8 @@ class observation2(observation):
             #    psf_corr = 1
                 #yf, xf = np.mgrid[0:self.data_arr[i].shape[0],0:self.data_arr[i].shape[1]].astype(int)
                 #psf_arr = self.psf_model_list[i](yf,xf)
-                
+            #import pdb
+            #pdb.set_trace()
 
             if self.telescope == 'JWST':
 
@@ -2076,7 +2458,8 @@ class observation2(observation):
                 flux,fluxerr,mag,magerr,zp = calibrate_JWST_flux(flux_sum,
                     self.psf_result.errors[flux_var],self.wcs_list[i],flux_units=self.flux_units)
             else:
-
+                #import pdb
+                #pdb.set_trace()
                 flux,fluxerr,mag,magerr,zp = calibrate_HST_flux(flux_sum,
                     self.psf_result.errors[flux_var],self.prim_headers[i],self.sci_headers[i])
 
@@ -2102,6 +2485,8 @@ class observation2(observation):
                 result_cal['y_err'].append(yerr)
             result_cal['ra'].append(ra)
             result_cal['dec'].append(dec)
+
+
             
 
         self.psf_result.phot_cal_table = astropy.table.Table(result_cal)
@@ -2110,6 +2495,7 @@ class observation2(observation):
         print('Finished PSF psf_photometry with median residuals of %.2f'%\
             (100*np.nanmedian([np.nansum(self.psf_result.resid_arr[i])/\
                 np.nansum(self.psf_result.data_arr[i]) for i in range(self.n_exposures)]))+'%')
+        return self.psf_result    
             #(100*np.median([np.median(self.psf_result.resid_arr[i]/\
             #    self.psf_result.data_arr[i]) for i in range(self.n_exposures)]))+'%')
 

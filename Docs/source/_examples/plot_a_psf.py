@@ -1,291 +1,204 @@
 """
-==============
-PSF Photometry
-==============
-Measuring PSF Photometry with space_phot.
-"""
-	
-###############################################################
-# An example HST Dataset is downloaded, and then we measure 
-# psf photometry. This is public HST data for the
-# gravitationally lensed SN 2022riv
-   
+PSF Photometry on Public HST and JWST Data
+=========================================
 
-import sys,os,glob
-from astropy.io import fits
-from astropy.table import Table
-from astropy.nddata import extract_array
-from astropy.coordinates import SkyCoord
-from astropy import wcs
-from astropy.wcs.utils import skycoord_to_pixel
-from astropy import units as u
-import numpy as np
+This tutorial demonstrates PSF photometry with ``space_phot`` on public HST and JWST data.
+
+The page is generated with Sphinx-Gallery, so code is executed top-to-bottom and figures
+and printed outputs appear inline.
+
+Notes
+-----
+- These examples may download data from MAST. If you want to avoid network access
+  during documentation builds, set ``SPACE_PHOT_DOCS_NETWORK=0`` (default) and
+  pre-download the files locally.
+"""
+
+import os
+import glob
+
 import matplotlib.pyplot as plt
-from astroquery.mast import Observations
-from astropy.visualization import (simple_norm,LinearStretch)
+import numpy as np
+
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+
+# Optional: network download
+RUN_NETWORK = os.environ.get("SPACE_PHOT_DOCS_NETWORK", "0") == "1"
+RUN_LEVEL3 = os.environ.get("SPACE_PHOT_DOCS_LEVEL3", "0") == "1"
 
 import space_phot
 
 
-####################################################################
-# 
-# ----------
-# HST Images
-# ----------
+# %%
+# HST: locate files
+# -----------------
 #
-# **Download some Data**
+# If files are not present and network is enabled, we download from MAST.
+hst_obs_id = "hst_16264_12_wfc3_ir_f110w_iebc12"
+sn_hst = SkyCoord("21:29:40.2110", "+0:05:24.154", unit=(u.hourangle, u.deg))
+
+hst_files = sorted(glob.glob("mastDownload/HST/*/*flt.fits"))
+if (len(hst_files) == 0) and RUN_NETWORK:
+    from astroquery.mast import Observations
+
+    obs_table = Observations.query_criteria(obs_id=hst_obs_id)
+    obs_table = obs_table[obs_table["filters"] == "F110W"]
+
+    prods = Observations.get_product_list(obs_table)
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "FLT"]
+
+    Observations.download_products(prods[:3], extension="fits")
+    hst_files = sorted(glob.glob("mastDownload/HST/*/*flt.fits"))
+
+if len(hst_files) == 0:
+    raise RuntimeError(
+        "No HST files found. Either pre-download into mastDownload/ "
+        "or set SPACE_PHOT_DOCS_NETWORK=1 for docs builds."
+    )
+
+print(f"HST files: {len(hst_files)}")
+
+
+# %%
+# Run HST PSF photometry
+# ----------------------
 #
-# For this example we download HST FLT images from MAST.  
+# Build an observation object and a PSF model, then run PSF photometry.
+obs_hst = space_phot.observation2(hst_files)
 
-obs_table = Observations.query_criteria(obs_id='hst_16264_12_wfc3_ir_f110w_iebc12')
-obs_table1 = obs_table[obs_table['filters']=='F110W']
+psfs_hst = space_phot.get_hst_psf(obs_hst, sn_hst)
+plt.figure()
+plt.imshow(psfs_hst[0].data, origin="lower")
+plt.title("Example HST PSF model")
+plt.colorbar()
+plt.tight_layout()
 
-data_products_by_obs = Observations.get_product_list(obs_table1)
-data_products_by_obs = data_products_by_obs[data_products_by_obs['calib_level']==2]
-data_products_by_obs = data_products_by_obs[data_products_by_obs['productSubGroupDescription']=='FLT'][:3]
-Observations.download_products(data_products_by_obs,extension='fits')
+obs_hst.psf_photometry(
+    psfs_hst,
+    sn_hst,
+    bounds={"flux": [-3000, 100], "centroid": [-0.5, 0.5], "bkg": [0, 10]},
+    fit_width=5,
+    fit_bkg=True,
+    fit_flux="single",
+)
 
-
-####################################################################
-# **Examine the first Image**
-# 
-
-files = glob.glob('mastDownload/HST/*/*flt.fits')
-ref_image = files[0]
-ref_fits = fits.open(ref_image)
-ref_data = fits.open(ref_image)['SCI',1].data
-norm1 = simple_norm(ref_data,stretch='linear',min_cut=-1,max_cut=10)
-
-plt.imshow(ref_data, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
+# Show diagnostics (these should create figures in your updated code)
+obs_hst.plot_psf_fit()
 plt.show()
 
-####################################################################
-# **Zoom in to see the Supernova**
-# 
-
-sn_location = SkyCoord('21:29:40.2110','+0:05:24.154',unit=(u.hourangle,u.deg))
-ref_y,ref_x = skycoord_to_pixel(sn_location,wcs.WCS(ref_fits['SCI',1],ref_fits))
-ref_cutout = extract_array(ref_data,(11,11),(ref_x,ref_y))
-norm1 = simple_norm(ref_cutout,stretch='linear',min_cut=-1,max_cut=10)
-plt.imshow(ref_cutout, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.title('SN2022riv')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
+obs_hst.plot_psf_posterior(minweight=0.0005)
 plt.show()
 
-####################################################################
-# **Get the PSF model**
-# 
-# space_phot uses Jay Anderson's gridded HST PSF models. Some filters
-# are missing, so for those you'll have to either use a 
-# neighboring filter or build your own PSF from stars in the field.
+print("HST calibrated PSF photometry:")
+print(obs_hst.psf_result.phot_cal_table)
 
-hst_obs = space_phot.observation2(files)
-psfs = space_phot.get_hst_psf(hst_obs,sn_location)
-plt.imshow(psfs[0].data)
+
+# %%
+# JWST: locate files
+# ------------------
+jwst_obs_id = "jw02767-o002_t001_nircam_clear-f150w"
+sn_jwst = SkyCoord("21:29:40.2103", "+0:05:24.158", unit=(u.hourangle, u.deg))
+
+jwst_files = sorted(glob.glob("mastDownload/JWST/*/*cal.fits"))
+if (len(jwst_files) == 0) and RUN_NETWORK:
+    from astroquery.mast import Observations
+
+    obs_table = Observations.query_criteria(obs_id=jwst_obs_id)
+    prods = Observations.get_product_list(obs_table)
+
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "CAL"]
+
+    Observations.download_products(prods[:4], extension="fits")
+    jwst_files = sorted(glob.glob("mastDownload/JWST/*/*cal.fits"))
+
+if len(jwst_files) == 0:
+    raise RuntimeError(
+        "No JWST files found. Either pre-download into mastDownload/ "
+        "or set SPACE_PHOT_DOCS_NETWORK=1 for docs builds."
+    )
+
+print(f"JWST files: {len(jwst_files)}")
+
+
+# %%
+# Run JWST PSF photometry
+# -----------------------
+obs_jwst = space_phot.observation2(jwst_files)
+
+psfs_jwst = space_phot.get_jwst_psf(obs_jwst, sn_jwst)
+plt.figure()
+plt.imshow(psfs_jwst[0].data, origin="lower")
+plt.title("Example JWST PSF model")
+plt.colorbar()
+plt.tight_layout()
+
+obs_jwst.psf_photometry(
+    psfs_jwst,
+    sn_jwst,
+    bounds={"flux": [-3000, 1000], "centroid": [-1.0, 1.0], "bkg": [0, 50]},
+    fit_width=5,
+    fit_bkg=True,
+    fit_flux="single",
+)
+
+obs_jwst.plot_psf_fit()
 plt.show()
 
-####################################################################
-# **Measure the PSF photometry**
-# 
-hst_obs.psf_photometry(psfs,sn_location,bounds={'flux':[-3000,100],
-                        'centroid':[-.5,.5],
-                        'bkg':[0,10]},
-                        fit_width=5,
-                        fit_bkg=True,
-                        fit_flux='single')
-hst_obs.plot_psf_fit()
+obs_jwst.plot_psf_posterior(minweight=0.0005)
 plt.show()
 
-hst_obs.plot_psf_posterior(minweight=.0005)
-plt.show()
+print("JWST calibrated PSF photometry:")
+print(obs_jwst.psf_result.phot_cal_table)
 
-print(hst_obs.psf_result.phot_cal_table)
 
-####################################################################
-# **Flux per exposure**
-# 
-# You can also fit for a flux in every exposure, instead of a single
-# flux across all exposures
-hst_obs.psf_photometry(psfs,sn_location,bounds={'flux':[-3000,100],
-                        'centroid':[-.5,.5],
-                        'bkg':[0,10]},
-                        fit_width=5,
-                        fit_bkg=True,
-                        fit_flux='multi')
-hst_obs.plot_psf_fit()
-plt.show()
-
-hst_obs.plot_psf_posterior(minweight=.0005)
-plt.show()
-
-print(hst_obs.psf_result.phot_cal_table)
-
-####################################################################
-# 
-# -----------
-# JWST Images
-# -----------
+# %%
+# Level 3 JWST PSF photometry (i2d)
+# ---------------------------------
 #
-# **Download some Data**
-#
-# For this example we download JWST cal images from MAST. We just use
-# 4 of the 8 dithered exposures  for speed here, but in principle
-# space_phot can handle as many as are needed (given time).
-obs_table = Observations.query_criteria(obs_id='jw02767-o002_t001_nircam_clear-f150w')
-data_products_by_obs = Observations.get_product_list(obs_table)
-data_products_by_obs = data_products_by_obs[data_products_by_obs['calib_level']==2]
-data_products_by_obs = data_products_by_obs[data_products_by_obs['productSubGroupDescription']=='CAL']
+# This section demonstrates PSF photometry on Level 3 JWST products (e.g. ``*_i2d.fits``).
+# We gate it behind an env var so docs builds remain stable if Level 3 products
+# are not available locally.
+if RUN_LEVEL3:
+    jwst_i2d_files = sorted(glob.glob("mastDownload/JWST/*/*i2d.fits"))
+    if len(jwst_i2d_files) == 0:
+        raise RuntimeError(
+            "No JWST *_i2d.fits found for Level 3 example. "
+            "Pre-download Level 3 products or disable with SPACE_PHOT_DOCS_LEVEL3=0."
+        )
 
-# Just take the nrcb3 cals (where the SN is located)
-to_remove = []
-for i in range(len(data_products_by_obs)):
-    if not data_products_by_obs[i]['obs_id'].endswith('nrcb3'):
-        to_remove.append(i)
-data_products_by_obs.remove_rows(to_remove)
-Observations.download_products(data_products_by_obs[:4],extension='fits')
+    print(f"JWST Level 3 files: {len(jwst_i2d_files)}")
 
-####################################################################
-# **Examine the first Image**
-# 
+    obs3_jwst = space_phot.observation3(jwst_i2d_files[0])
 
-files = glob.glob('mastDownload/JWST/*/*cal.fits')
-ref_image = files[0]
-ref_fits = fits.open(ref_image)
-ref_data = fits.open(ref_image)['SCI',1].data
-norm1 = simple_norm(ref_data,stretch='linear',min_cut=-1,max_cut=10)
+    # Prefer the level-3 PSF helper if your package has it
+    psfs3_jwst = space_phot.get_jwst3_psf(obs_jwst,obs3_jwst, sn_jwst, num_psfs=4)
+    
+    plt.figure()
+    plt.imshow(psfs3_jwst.data, origin="lower")
+    plt.title("JWST Level 3 PSF model")
+    plt.colorbar()
+    plt.tight_layout()
 
-plt.imshow(ref_data, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
+    obs3_jwst.psf_photometry(
+        psfs3_jwst,
+        sn_jwst,
+        bounds={"flux": [-5000, 5000], "centroid": [-1.0, 1.0], "bkg": [0, 200]},
+        fit_width=7,
+        fit_bkg=True,
+        fit_flux="single",
+    )
 
-####################################################################
-# **Zoom in to see the Supernova**
-# 
+    obs3_jwst.plot_psf_fit()
+    plt.show()
 
-sn_location = SkyCoord('21:29:40.2103','+0:05:24.158',unit=(u.hourangle,u.deg))
-ref_y,ref_x = skycoord_to_pixel(sn_location,wcs.WCS(ref_fits['SCI',1],ref_fits))
-ref_cutout = extract_array(ref_data,(11,11),(ref_x,ref_y))
-norm1 = simple_norm(ref_cutout,stretch='linear',min_cut=-1,max_cut=10)
-plt.imshow(ref_cutout, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.title('SN2022riv')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
+    obs3_jwst.plot_psf_posterior(minweight=0.0005)
+    plt.show()
 
-####################################################################
-# **Get the PSF model**
-# 
-# space_phot uses WebbPSF models for JWST. This can be pretty slow, 
-# so you don't want to run this every time. Either create your
-# own repository of these and pass each one when needed directly to
-# the psf_photometry function, or else at least just do this once,
-# save the ouptut, and then read it in and proceed to photometry
-# for testing purposes.
-
-jwst_obs = space_phot.observation2(files)
-psfs = space_phot.get_jwst_psf(jwst_obs,sn_location,num_psfs=4)
-plt.imshow(psfs[0].data)
-plt.show()
-
-####################################################################
-# **Measure the PSF photometry**
-# 
-jwst_obs.psf_photometry(psfs,sn_location,bounds={'flux':[-1000,1000],
-                        'centroid':[-2,2],
-                        'bkg':[0,50]},
-                        fit_width=5,
-                        fit_bkg=True,
-                        fit_flux='single')
-jwst_obs.plot_psf_fit()
-plt.show()
-
-jwst_obs.plot_psf_posterior(minweight=.0005)
-plt.show()
-
-print(jwst_obs.psf_result.phot_cal_table)
-
-#####################################################################
-# 
-# -----------
-# Level 3 PSF
-# -----------
-#
-# While it's generally recommended to perform PSF photometry on data
-# with level 2 processing (i.e., before drizzling), sometimes low
-# S/N means it's desirable to perform PSF photometry on level 3 data.
-# While (usually) not quite as accurate, here is a function to do
-# this. 
-#
-# **Download some Data**
-#
-# For this example we download JWST cal images from MAST. We just use
-# 4 of the 8 dithered exposures  for speed here, but in principle
-# space_phot can handle as many as are needed (given time).
-obs_table = Observations.query_criteria(obs_id='jw02767-o002_t001_nircam_clear-f150w')
-data_products_by_obs = Observations.get_product_list(obs_table)
-data_products_by_obs = data_products_by_obs[data_products_by_obs['calib_level']==3]
-data_products_by_obs = data_products_by_obs[data_products_by_obs['productSubGroupDescription']=='I2D']
-Observations.download_products(data_products_by_obs[0],extension='fits')
-
-####################################################################
-# **Examine the Image**
-# 
-
-files = glob.glob('mastDownload/JWST/*/*i2d.fits')
-ref_image = files[0]
-ref_fits = fits.open(ref_image)
-ref_data = fits.open(ref_image)['SCI',1].data
-norm1 = simple_norm(ref_data,stretch='linear',min_cut=-1,max_cut=10)
-
-plt.imshow(ref_data, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
-
-####################################################################
-# **Zoom in to see the Supernova**
-# 
-
-sn_location = SkyCoord('21:29:40.2103','+0:05:24.158',unit=(u.hourangle,u.deg))
-ref_y,ref_x = skycoord_to_pixel(sn_location,wcs.WCS(ref_fits['SCI',1],ref_fits))
-ref_cutout = extract_array(ref_data,(11,11),(ref_x,ref_y))
-norm1 = simple_norm(ref_cutout,stretch='linear',min_cut=-1,max_cut=10)
-plt.imshow(ref_cutout, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.title('SN2022riv (level 3)')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
-
-####################################################################
-# **Get the PSF model**
-# 
-# (note the use of "3" instead of "2" everywhere). And note that it
-# is the level 2 observation, not 3, that is passed to the psf
-# function. That is so the PSF model can be drizzled using the same
-# pattern used to drizzle the data. You can do the same with HST
-# by just replacing "jwst" with "hst". 
-
-jwst3_obs = space_phot.observation3(files[0])
-psf3 = space_phot.get_jwst3_psf(jwst_obs,sn_location,num_psfs=4)
-plt.imshow(psf3.data)
-plt.show()
-
-####################################################################
-# **Measure the PSF photometry**
-# 
-jwst3_obs.psf_photometry(psf3,sn_location,bounds={'flux':[-1000,1000],
-                        'centroid':[-2,2],
-                        'bkg':[0,50]},
-                        fit_width=5,
-                        fit_bkg=True,
-                        fit_flux=True)
-jwst3_obs.plot_psf_fit()
-plt.show()
-
-jwst3_obs.plot_psf_posterior(minweight=.0005)
-plt.show()
+    print("JWST Level 3 calibrated PSF photometry:")
+    print(obs3_jwst.psf_result.phot_cal_table)
+else:
+    print("Skipping Level 3 JWST PSF example (set SPACE_PHOT_DOCS_LEVEL3=1 to enable).")
 

@@ -7,21 +7,20 @@ Welcome to the Space Photometry Tool
 ====================================
 
 
+space_phot
+==========
+
+Aperture and PSF photometry for HST and JWST.
+
 .. toctree::
-   :maxdepth: 1
-   :titlesonly:
+   :maxdepth: 2
+   :caption: Contents
 
    install
-
-.. include:: examples/index.rst
-   :start-after: :orphan:
-
-.. toctree::
-   :hidden:
-   :titlesonly:
-
    api
    contributors
+   examples/index
+
 
 :doc:`api`
 ================

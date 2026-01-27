@@ -1,7 +1,7 @@
 # tests/conftest.py
 import pytest
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def patch_calibration(monkeypatch):
     """
     Patch the calibration functions to something simple and deterministic.

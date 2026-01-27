@@ -1,0 +1,234 @@
+[INFO    ] Setting up logfile :  astrodrizzle.log
+[INFO    ] AstroDrizzle log file: astrodrizzle.log
+[INFO    ] AstroDrizzle Version 3.10.0 started at: 17:46:27.283 (26/01/2026)
+[INFO    ] 
+[INFO    ] Version Information
+[INFO    ] --------------------
+[INFO    ] Python Version 3.11.13 (main, Jun  5 2025, 08:14:07) [Clang 14.0.6 ]
+[INFO    ] numpy Version -> 2.2.6 
+[INFO    ] astropy Version -> 7.1.1 
+[INFO    ] stwcs Version -> 1.7.5 
+[INFO    ] photutils Version -> 2.3.0 
+[INFO    ] ==== Processing Step  Initialization  started at  17:46:27.284 (26/01/2026)
+[INFO    ] 
+[INFO    ] Preserving original of:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02uzq_flt.fits as  OrIg_files/if2e02uzq_flt.fits
+[INFO    ] Preserving original of:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v1q_flt.fits as  OrIg_files/if2e02v1q_flt.fits
+[INFO    ] Preserving original of:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v3q_flt.fits as  OrIg_files/if2e02v3q_flt.fits
+[INFO    ] Preserving original of:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vbq_flt.fits as  OrIg_files/if2e02vbq_flt.fits
+[INFO    ] Preserving original of:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vdq_flt.fits as  OrIg_files/if2e02vdq_flt.fits
+[INFO    ] Preserving original of:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vfq_flt.fits as  OrIg_files/if2e02vfq_flt.fits
+[INFO    ] Executing serially
+[INFO    ] Setting up output name: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/temp_psf_drz.fits
+[INFO    ] ##############################################################################
+[INFO    ] #                                                                            #
+[INFO    ] # “minmed” is highly recommended for three images,                           #
+[INFO    ] #  and is good for four to six images,                                       #
+[INFO    ] #  but should be avoided for ten or more images.                             #
+[INFO    ] #                                                                            #
+[INFO    ] ##############################################################################
+[INFO    ] -Creating imageObject List as input for processing steps.
+[INFO    ] Reading in MDRIZSKY of 0.2699533645496981
+[INFO    ] Reading in MDRIZSKY of 0.18814822606425893
+[INFO    ] Reading in MDRIZSKY of 0.017613376734585014
+[INFO    ] Reading in MDRIZSKY of 0.2635150462041048
+[INFO    ] Reading in MDRIZSKY of 0.20198719059554596
+[INFO    ] Reading in MDRIZSKY of 0.0
+[INFO    ] Reset bit values of 4096 to a value of 0 in /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02uzq_flt.fits[DQ,1]
+[INFO    ] Reset bit values of 4096 to a value of 0 in /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v1q_flt.fits[DQ,1]
+[INFO    ] Reset bit values of 4096 to a value of 0 in /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v3q_flt.fits[DQ,1]
+[INFO    ] Reset bit values of 4096 to a value of 0 in /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vbq_flt.fits[DQ,1]
+[INFO    ] Reset bit values of 4096 to a value of 0 in /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vdq_flt.fits[DQ,1]
+[INFO    ] Reset bit values of 4096 to a value of 0 in /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vfq_flt.fits[DQ,1]
+[INFO    ] -Creating output WCS.
+[INFO    ] WCS Keywords
+[INFO    ] 
+[INFO    ] Number of WCS axes: 2
+[INFO    ] CTYPE : 'RA---TAN' 'DEC--TAN' 
+[INFO    ] CRVAL : 322.4196627516801 0.09170834461132094 
+[INFO    ] CRPIX : 546.5000000000085 483.5000000000075 
+[INFO    ] CD1_1 CD1_2  : -1.0778623115265434e-05 -3.3955292794187864e-05 
+[INFO    ] CD2_1 CD2_2  : -3.3955292794187864e-05 1.0778623115265434e-05 
+[INFO    ] NAXIS : 1094  968
+[INFO    ] ********************************************************************************
+[INFO    ] *
+[INFO    ] *  Estimated memory usage:  up to 19 Mb.
+[INFO    ] *  Output image size:       1094 X 968 pixels. 
+[INFO    ] *  Output image file:       ~ 12 Mb. 
+[INFO    ] *  Cores available:         1
+[INFO    ] *
+[INFO    ] ********************************************************************************
+[INFO    ] ==== Processing Step Initialization finished at 17:46:28.298 (26/01/2026)
+[INFO    ] USER INPUT PARAMETERS common to all Processing Steps:
+[INFO    ] 	build :	True
+[INFO    ] 	coeffs :	True
+[INFO    ] 	context :	True
+[INFO    ] 	crbit :	4096
+[INFO    ] 	group :	sci,1
+[INFO    ] 	in_memory :	False
+[INFO    ] 	input :	/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02uzq_flt.fits,/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v1q_flt.fits,/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v3q_flt.fits,/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vbq_flt.fits,/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vdq_flt.fits,/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vfq_flt.fits
+[INFO    ] 	mdriztab :	False
+[INFO    ] 	num_cores :	None
+[INFO    ] 	output :	/Users/jpierel/CodeBase/space_phot/space_phot/temp_756/temp_psf
+[INFO    ] 	proc_unit :	native
+[INFO    ] 	resetbits :	4096
+[INFO    ] 	rules_file :	
+[INFO    ] 	runfile :	astrodrizzle.log
+[INFO    ] 	stepsize :	10
+[INFO    ] 	updatewcs :	False
+[INFO    ] 	wcskey :	
+[INFO    ] ==== Processing Step  Static Mask  started at  17:46:28.298 (26/01/2026)
+[INFO    ] 
+[INFO    ] USER INPUT PARAMETERS for Static Mask Step:
+[INFO    ] 	static :	True
+[INFO    ] 	static_sig :	4.0
+[INFO    ] Computing static mask:
+
+[INFO    ] ! WARNING: Clipped data falls within 1 histogram bin
+[INFO    ]   mode =  0.000000;   rms = 0.000000;   static_sig = 4.00
+[INFO    ] Computing static mask:
+
+[INFO    ] ! WARNING: Clipped data falls within 1 histogram bin
+[INFO    ]   mode =  0.000000;   rms = 0.000000;   static_sig = 4.00
+[INFO    ] Computing static mask:
+
+[INFO    ] ! WARNING: Clipped data falls within 1 histogram bin
+[INFO    ]   mode =  0.000000;   rms = 0.000000;   static_sig = 4.00
+[INFO    ] Computing static mask:
+
+[INFO    ] ! WARNING: Clipped data falls within 1 histogram bin
+[INFO    ]   mode =  0.000000;   rms = 0.000000;   static_sig = 4.00
+[INFO    ] Computing static mask:
+
+[INFO    ] ! WARNING: Clipped data falls within 1 histogram bin
+[INFO    ]   mode =  0.000000;   rms = 0.000000;   static_sig = 4.00
+[INFO    ] Computing static mask:
+
+[INFO    ] ! WARNING: Clipped data falls within 1 histogram bin
+[INFO    ]   mode =  0.000000;   rms = 0.000000;   static_sig = 4.00
+[INFO    ] Saving static mask to disk: /users/jpierel/codebase/space_phot/space_phot/temp_756/temp_1014x1014_1_staticMask.fits
+[INFO    ] ==== Processing Step Static Mask finished at 17:46:28.421 (26/01/2026)
+[INFO    ] ==== Processing Step  Subtract Sky  started at  17:46:28.421 (26/01/2026)
+[INFO    ] 
+[INFO    ] Sky Subtraction step not performed.
+[INFO    ] ==== Processing Step Subtract Sky finished at 17:46:28.548 (26/01/2026)
+[INFO    ] ==== Processing Step  Separate Drizzle  started at  17:46:28.549 (26/01/2026)
+[INFO    ] 
+[INFO    ] Single drizzle step not performed.
+[INFO    ] ==== Processing Step Separate Drizzle finished at 17:46:28.549 (26/01/2026)
+[INFO    ] ==== Processing Step  Create Median  started at  17:46:28.549 (26/01/2026)
+[INFO    ] 
+[INFO    ] Median combination step not performed.
+[INFO    ] ==== Processing Step  Blot  started at  17:46:28.549 (26/01/2026)
+[INFO    ] 
+[INFO    ] Blot step not performed.
+[INFO    ] ==== Processing Step Blot finished at 17:46:28.549 (26/01/2026)
+[INFO    ] ==== Processing Step  Driz_CR  started at  17:46:28.549 (26/01/2026)
+[INFO    ] 
+[INFO    ] Cosmic-ray identification (driz_cr) step not performed.
+[INFO    ] ==== Processing Step  Final Drizzle  started at  17:46:28.549 (26/01/2026)
+[INFO    ] 
+[INFO    ] Interpreted paramDict with single=False as:
+{'build': True, 'stepsize': 10, 'coeffs': True, 'wcskey': '', 'wht_type': 'ERR', 'kernel': 'square', 'wt_scl': 'exptime', 'pixfrac': 1.0, 'fillval': None, 'maskval': None, 'bits': 0, 'units': 'cps'}
+[INFO    ] USER INPUT PARAMETERS for Final Drizzle Step:
+[INFO    ] 	bits :	0
+[INFO    ] 	build :	True
+[INFO    ] 	clean :	True
+[INFO    ] 	coeffs :	True
+[INFO    ] 	crbit :	4096
+[INFO    ] 	fillval :	None
+[INFO    ] 	kernel :	square
+[INFO    ] 	logfile :	astrodrizzle.log
+[INFO    ] 	maskval :	None
+[INFO    ] 	pixfrac :	1.0
+[INFO    ] 	proc_unit :	native
+[INFO    ] 	rules_file :	None
+[INFO    ] 	stepsize :	10
+[INFO    ] 	units :	cps
+[INFO    ] 	wcskey :	
+[INFO    ] 	wht_type :	ERR
+[INFO    ] 	wt_scl :	exptime
+[INFO    ]   **Using sub-sampling value of 10 for kernel square
+[INFO    ] Running Drizzle to create output frame with WCS of: 
+[INFO    ] WCS Keywords
+[INFO    ] 
+[INFO    ] Number of WCS axes: 2
+[INFO    ] CTYPE : 'RA---TAN' 'DEC--TAN' 
+[INFO    ] CRVAL : 322.4196627516801 0.09170834461132094 
+[INFO    ] CRPIX : 546.5000000000085 483.5000000000075 
+[INFO    ] CD1_1 CD1_2  : -1.0778623115265434e-05 -3.3955292794187864e-05 
+[INFO    ] CD2_1 CD2_2  : -3.3955292794187864e-05 1.0778623115265434e-05 
+[INFO    ] NAXIS : 1094  968
+[INFO    ] -Drizzle input: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02uzq_flt.fits[sci,1]
+[WARNING ] No CR mask file found! Input DQ array not updated.
+[INFO    ] Applying ERR weighting to DQ mask for chip 1
+[INFO    ] Using WCSLIB-based coordinate transformation...
+[INFO    ] stepsize = 10
+[INFO    ] -Drizzling using kernel = square
+
+[INFO    ] -Drizzle input: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v1q_flt.fits[sci,1]
+[WARNING ] No CR mask file found! Input DQ array not updated.
+[INFO    ] Applying ERR weighting to DQ mask for chip 1
+[INFO    ] Using WCSLIB-based coordinate transformation...
+[INFO    ] stepsize = 10
+[INFO    ] -Drizzling using kernel = square
+
+[INFO    ] -Drizzle input: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v3q_flt.fits[sci,1]
+[WARNING ] No CR mask file found! Input DQ array not updated.
+[INFO    ] Applying ERR weighting to DQ mask for chip 1
+[INFO    ] Using WCSLIB-based coordinate transformation...
+[INFO    ] stepsize = 10
+[INFO    ] -Drizzling using kernel = square
+
+[INFO    ] -Drizzle input: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vbq_flt.fits[sci,1]
+[WARNING ] No CR mask file found! Input DQ array not updated.
+[INFO    ] Applying ERR weighting to DQ mask for chip 1
+[INFO    ] Using WCSLIB-based coordinate transformation...
+[INFO    ] stepsize = 10
+[INFO    ] -Drizzling using kernel = square
+
+[INFO    ] -Drizzle input: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vdq_flt.fits[sci,1]
+[WARNING ] No CR mask file found! Input DQ array not updated.
+[INFO    ] Applying ERR weighting to DQ mask for chip 1
+[INFO    ] Using WCSLIB-based coordinate transformation...
+[INFO    ] stepsize = 10
+[INFO    ] -Drizzling using kernel = square
+
+[INFO    ] -Drizzle input: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vfq_flt.fits[sci,1]
+[WARNING ] No CR mask file found! Input DQ array not updated.
+[INFO    ] Applying ERR weighting to DQ mask for chip 1
+[INFO    ] Using WCSLIB-based coordinate transformation...
+[INFO    ] stepsize = 10
+[INFO    ] -Drizzling using kernel = square
+
+[INFO    ] -Generating multi-extension output file:  /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/temp_psf_drz.fits
+[INFO    ] Deleted all instances of WCS with key A in extensions [1]
+[INFO    ] Deleted all instances of WCS with key B in extensions [1]
+[INFO    ] Writing out to disk: /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/temp_psf_drz.fits
+[INFO    ] ==== Processing Step Final Drizzle finished at 17:46:30.148 (26/01/2026)
+[INFO    ] 
+[INFO    ] AstroDrizzle Version 3.10.0 is finished processing at 17:46:30.149 (26/01/2026).
+[INFO    ] 
+[INFO    ] 
+[INFO    ] 
+[INFO    ]    --------------------          --------------------
+[INFO    ]                    Step          Elapsed time
+[INFO    ]    --------------------          --------------------
+[INFO    ] 
+[INFO    ]          Initialization          1.0138 sec.
+[INFO    ]             Static Mask          0.1230 sec.
+[INFO    ]            Subtract Sky          0.1270 sec.
+[INFO    ]        Separate Drizzle          0.0002 sec.
+[INFO    ]           Create Median          0.0000 sec.
+[INFO    ]                    Blot          0.0001 sec.
+[INFO    ]                 Driz_CR          0.0000 sec.
+[INFO    ]           Final Drizzle          1.5991 sec.
+[INFO    ]    ====================          ====================
+[INFO    ]                   Total          2.8632 sec.
+[INFO    ] 
+[INFO    ] Removing intermediate files for /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02uzq_flt.fits
+[INFO    ] Removing intermediate files for /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v1q_flt.fits
+[INFO    ] Removing intermediate files for /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02v3q_flt.fits
+[INFO    ] Removing intermediate files for /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vbq_flt.fits
+[INFO    ] Removing intermediate files for /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vdq_flt.fits
+[INFO    ] Removing intermediate files for /Users/jpierel/CodeBase/space_phot/space_phot/temp_756/if2e02vfq_flt.fits
+[INFO    ] Trailer file written to:  astrodrizzle.log

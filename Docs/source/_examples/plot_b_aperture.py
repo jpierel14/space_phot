@@ -1,147 +1,159 @@
 """
-===================
-Aperture Photometry
-===================
-Measuring PSF Photometry with space_phot.
-"""
-	
-###############################################################
-# An example HST Dataset is downloaded, and then we measure 
-# aperture photometry. This is public HST data for the
-# gravitationally lensed SN 2022riv
-   
+Aperture Photometry on Public HST and JWST Data
+===============================================
 
-import sys,os,glob
-from astropy.io import fits
-from astropy.table import Table
-from astropy.nddata import extract_array
-from astropy.coordinates import SkyCoord
-from astropy import wcs
-from astropy.wcs.utils import skycoord_to_pixel
-from astropy import units as u
-import numpy as np
+This tutorial demonstrates aperture photometry with ``space_phot`` on public HST and JWST data.
+
+The JWST path uses the distortion-corrected (PAM-applied) data products in level-2
+processing (as used by ``space_phot``).
+"""
+
+import os
+import glob
+
 import matplotlib.pyplot as plt
-from astroquery.mast import Observations
-from astropy.visualization import (simple_norm,LinearStretch)
+
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+
+RUN_NETWORK = os.environ.get("SPACE_PHOT_DOCS_NETWORK", "0") == "1"
+RUN_LEVEL3 = os.environ.get("SPACE_PHOT_DOCS_LEVEL3", "0") == "1"
 
 import space_phot
 
 
-####################################################################
-# 
-# ----------
-# HST Images
-# ----------
+# %%
+# HST: download or locate files
+hst_obs_id = "hst_16264_12_wfc3_ir_f110w_iebc12"
+sn_hst = SkyCoord("21:29:40.2110", "+0:05:24.154", unit=(u.hourangle, u.deg))
+
+hst_files = sorted(glob.glob("mastDownload/HST/*/*flt.fits"))
+if (len(hst_files) == 0) and RUN_NETWORK:
+    from astroquery.mast import Observations
+
+    obs_table = Observations.query_criteria(obs_id=hst_obs_id)
+    obs_table = obs_table[obs_table["filters"] == "F110W"]
+
+    prods = Observations.get_product_list(obs_table)
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "FLT"]
+
+    Observations.download_products(prods[:3], extension="fits")
+    hst_files = sorted(glob.glob("mastDownload/HST/*/*flt.fits"))
+
+if len(hst_files) == 0:
+    raise RuntimeError(
+        "No HST files found. Pre-download or set SPACE_PHOT_DOCS_NETWORK=1."
+    )
+
+print(f"HST files: {len(hst_files)}")
+
+
+# %%
+# HST aperture photometry
+obs_hst = space_phot.observation2(hst_files)
+
+# Example: fixed pixel aperture + sky annulus
+obs_hst.aperture_photometry(
+    sn_hst,
+    radius=3,
+    skyan_in=5,
+    skyan_out=7,
+)
+
+print("HST calibrated aperture photometry:")
+print(obs_hst.aperture_result.phot_cal_table)
+
+
+# %%
+# JWST: download or locate files
+jwst_obs_id = "jw02767-o002_t001_nircam_clear-f150w"
+sn_jwst = SkyCoord("21:29:40.2103", "+0:05:24.158", unit=(u.hourangle, u.deg))
+
+jwst_files = sorted(glob.glob("mastDownload/JWST/*/*cal.fits"))
+if (len(jwst_files) == 0) and RUN_NETWORK:
+    from astroquery.mast import Observations
+
+    obs_table = Observations.query_criteria(obs_id=jwst_obs_id)
+    prods = Observations.get_product_list(obs_table)
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "CAL"]
+
+    Observations.download_products(prods[:4], extension="fits")
+    jwst_files = sorted(glob.glob("mastDownload/JWST/*/*cal.fits"))
+
+if len(jwst_files) == 0:
+    raise RuntimeError(
+        "No JWST files found. Pre-download or set SPACE_PHOT_DOCS_NETWORK=1."
+    )
+
+print(f"JWST files: {len(jwst_files)}")
+
+
+# %%
+# JWST aperture photometry
+obs_jwst = space_phot.observation2(jwst_files)
+
+# Example: use JWST aperture correction by EE (preferred)
+obs_jwst.aperture_photometry(
+    sn_jwst,
+    encircled_energy="70",
+)
+
+print("JWST calibrated aperture photometry:")
+print(obs_jwst.aperture_result.phot_cal_table)
+
+# %%
+# Level 3 HST aperture photometry (drz/drc)
+# -----------------------------------------
 #
-# **Download some Data**
-#
-# For this example we download HST FLT images from MAST.  
+# Level 3 HST products are typically drizzled: ``*_drz.fits`` or ``*_drc.fits``.
 
-obs_table = Observations.query_criteria(obs_id='hst_16264_12_wfc3_ir_f110w_iebc12')
-obs_table1 = obs_table[obs_table['filters']=='F110W']
+hst_lvl3_files = sorted(glob.glob("mastDownload/HST/*/*dr?.fits"))
+# glob pattern *dr?.fits matches *drz.fits and *drc.fits
 
-data_products_by_obs = Observations.get_product_list(obs_table1)
-data_products_by_obs = data_products_by_obs[data_products_by_obs['calib_level']==2]
-data_products_by_obs = data_products_by_obs[data_products_by_obs['productSubGroupDescription']=='FLT'][:3]
-Observations.download_products(data_products_by_obs,extension='fits')
+if len(hst_lvl3_files) == 0:
+    raise RuntimeError(
+        "No HST Level 3 (*_drz.fits or *_drc.fits) found. "
+        "Pre-download Level 3 products or disable with SPACE_PHOT_DOCS_LEVEL3=0."
+    )
 
+print(f"HST Level 3 files: {len(hst_lvl3_files)}")
 
-####################################################################
-# **Examine the first Image**
-# 
+obs3_hst = space_phot.observation3(hst_lvl3_files[0])
 
-files = glob.glob('mastDownload/HST/*/*flt.fits')
-ref_image = files[0]
-ref_fits = fits.open(ref_image)
-ref_data = fits.open(ref_image)['SCI',1].data
-norm1 = simple_norm(ref_data,stretch='linear',min_cut=-1,max_cut=10)
+obs3_hst.aperture_photometry(
+    sn_hst,
+    radius=3,
+    skyan_in=5,
+    skyan_out=7,
+)
 
-plt.imshow(ref_data, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
+print("HST Level 3 calibrated aperture photometry:")
+print(obs3_hst.aperture_result.phot_cal_table)
 
-####################################################################
-# **Zoom in to see the Supernova**
-# 
+# %%
+# Level 3 JWST aperture photometry (i2d)
+# --------------------------------------
 
-sn_location = SkyCoord('21:29:40.2110','+0:05:24.154',unit=(u.hourangle,u.deg))
-ref_y,ref_x = skycoord_to_pixel(sn_location,wcs.WCS(ref_fits['SCI',1],ref_fits))
-ref_cutout = extract_array(ref_data,(11,11),(ref_x,ref_y))
-norm1 = simple_norm(ref_cutout,stretch='linear',min_cut=-1,max_cut=10)
-plt.imshow(ref_cutout, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.title('SN2022riv')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
+jwst_i2d_files = sorted(glob.glob("mastDownload/JWST/*/*i2d.fits"))
 
-####################################################################
-# **Measure the aperture photometry**
-# 
-hst_obs = space_phot.observation2(files)
-hst_obs.aperture_photometry(sn_location,radius=3,
-                    skyan_in=5,skyan_out=7)
-print(hst_obs.aperture_result.phot_cal_table)
+if len(jwst_i2d_files) == 0:
+    raise RuntimeError(
+        "No JWST Level 3 (*_i2d.fits) found. "
+        "Pre-download Level 3 products or disable with SPACE_PHOT_DOCS_LEVEL3=0."
+    )
 
+print(f"JWST Level 3 files: {len(jwst_i2d_files)}")
 
-####################################################################
-# 
-# -----------
-# JWST Images
-# -----------
-#
-# **Download some Data**
-#
-# For this example we download JWST cal images from MAST. We just use
-# 4 of the 8 dithered exposures  for speed here, but in principle
-# space_phot can handle as many as are needed (given time).
-obs_table = Observations.query_criteria(obs_id='jw02767-o002_t001_nircam_clear-f150w')
-data_products_by_obs = Observations.get_product_list(obs_table)
-data_products_by_obs = data_products_by_obs[data_products_by_obs['calib_level']==2]
-data_products_by_obs = data_products_by_obs[data_products_by_obs['productSubGroupDescription']=='CAL']
+obs3_jwst = space_phot.observation3(jwst_i2d_files[0])
 
-# Just take the nrcb3 cals (where the SN is located)
-to_remove = []
-for i in range(len(data_products_by_obs)):
-    if not data_products_by_obs[i]['obs_id'].endswith('nrcb3'):
-        to_remove.append(i)
-data_products_by_obs.remove_rows(to_remove)
-Observations.download_products(data_products_by_obs[:4],extension='fits')
+# Keep the interface consistent: use EE-based aperture correction
+obs3_jwst.aperture_photometry(
+    sn_jwst,
+    encircled_energy="70",
+)
 
-####################################################################
-# **Examine the first Image**
-# 
-
-files = glob.glob('mastDownload/JWST/*/*cal.fits')
-ref_image = files[0]
-ref_fits = fits.open(ref_image)
-ref_data = fits.open(ref_image)['SCI',1].data
-norm1 = simple_norm(ref_data,stretch='linear',min_cut=-1,max_cut=10)
-
-plt.imshow(ref_data, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
-
-####################################################################
-# **Zoom in to see the Supernova**
-# 
-
-sn_location = SkyCoord('21:29:40.2103','+0:05:24.158',unit=(u.hourangle,u.deg))
-ref_y,ref_x = skycoord_to_pixel(sn_location,wcs.WCS(ref_fits['SCI',1],ref_fits))
-ref_cutout = extract_array(ref_data,(11,11),(ref_x,ref_y))
-norm1 = simple_norm(ref_cutout,stretch='linear',min_cut=-1,max_cut=10)
-plt.imshow(ref_cutout, origin='lower',
-                      norm=norm1,cmap='gray')
-plt.title('SN2022riv')
-plt.gca().tick_params(labelcolor='none',axis='both',color='none')
-plt.show()
-
-####################################################################
-# **Measure the aperture photometry**
-# 
-jwst_obs = space_phot.observation2(files)
-jwst_obs.aperture_photometry(sn_location,encircled_energy='70')
-print(jwst_obs.aperture_result.phot_cal_table)
-
+print("JWST Level 3 calibrated aperture photometry:")
+print(obs3_jwst.aperture_result.phot_cal_table)
 

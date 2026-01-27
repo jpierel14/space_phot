@@ -14,20 +14,31 @@
 #
 import os
 import sys
-#sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.abspath('../../space_phot'))
+
+# Make imports work whether building locally or on RTD
+DOCS_DIR = os.path.dirname(__file__)
+REPO_ROOT = os.path.abspath(os.path.join(DOCS_DIR, "..", ".."))
+sys.path.insert(0, REPO_ROOT)
+
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'space_phot'
-copyright = '2022 Justin Pierel'
+copyright = '2026 Justin Pierel'
 author = 'Justin Pierel'
 
 # The short X.Y version
 version = ''
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+try:
+    from importlib.metadata import version as _pkg_version
+    release = _pkg_version("space_phot")
+except Exception:
+    release = "unknown"
+version = release
+
+autosummary_generate = True
 
 
 # -- General configuration ---------------------------------------------------
@@ -46,8 +57,29 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx_gallery.gen_gallery',
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+
 ]
+
+autosummary_generate = True
+
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": False,
+    "show-inheritance": True,
+    "member-order": "bysource",
+    "inherited-members": True,
+}
+
+# If you use Google/Numpy style docstrings (napoleon)
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = False
+napoleon_use_param = True
+napoleon_use_rtype = True
+
 autosectionlabel_prefix_document = True
 autosectionlabel_maxdepth=2
 intersphinx_mapping = {'python': ('https://docs.python.org/3', None)}
@@ -114,6 +146,10 @@ sphinx_gallery_conf = {
     #                                   'spectral_white_bkg.png')
 }
 
+sphinx_gallery_conf.update({
+    "filename_pattern": r"plot_.*\.py",
+    "remove_config_comments": True,
+})
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".

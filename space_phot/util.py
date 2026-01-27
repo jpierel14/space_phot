@@ -1,251 +1,184 @@
-import warnings,os,sys,time,glob,shutil
+from __future__ import annotations
+
+from typing import Optional, Tuple
+
 import numpy as np
+
+try:
+    import crds
+except Exception as e:
+    crds = None
+
+import warnings
+import os
+import glob
+import shutil
 import urllib.request
+
+import numpy as np
 import scipy
 import stpsf
-
 import sncosmo
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import astropy
+from astropy import units as u
 from astropy import wcs
 from astropy.io import fits
-from astropy.table import Table,vstack
+from astropy.table import Table, vstack
 from astropy.coordinates import SkyCoord
-from astropy import units as u
 from astropy.stats import sigma_clipped_stats
 from astropy.time import Time
-from astropy.wcs.utils import skycoord_to_pixel,pixel_to_skycoord
 from astropy.nddata import extract_array
+from astropy.wcs.utils import skycoord_to_pixel, pixel_to_skycoord
+
+import gwcs
+from gwcs.utils import make_fitswcs_transform
+from gwcs import coordinate_frames as cf
+from astropy import coordinates as coord
+from asdf import AsdfFile
 
 import photutils
-from photutils.aperture import CircularAperture, CircularAnnulus, aperture_photometry
+from photutils.aperture import (
+    CircularAperture,
+    CircularAnnulus,
+    aperture_photometry,
+)
 from photutils.psf import EPSFModel
-warnings.simplefilter('ignore')
-import jwst
-from jwst import datamodels
-from jwst import source_catalog
-from jwst.source_catalog import reference_data
-import os
 
-from jwst.datamodels import RampModel, ImageModel
+import jwst
+#from jwst import datamodels
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Image3Pipeline
 from jwst.associations import asn_from_list
+from jwst.associations.lib.rules_level2_base import DMSLevel2bBase
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
+from jwst import datamodels
+
+#from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Image3Pipeline
+#from jwst.associations import asn_from_list
+#from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 
 from .wfc3_photometry.psf_tools.PSFUtils import make_models
 from .wfc3_photometry.psf_tools.PSFPhot import get_standard_psf
-#from .MIRIMBkgInterp import MIRIMBkgInterp
+
 __all__ = ['get_jwst_psf','get_hst_psf','get_jwst3_psf','get_hst3_psf','get_jwst_psf_grid',
             'get_jwst_psf_from_grid']
 
-# def fancy_background_sub(st_obs,sky_locations=None,pixel_locations=None,width=13,
-#                                 bkg_mode='polynomial',combine_fits=True,do_fit=True,
-#                                 degree=2,h_wht_s = 1,v_wht_s=1,h_wht_p=1,v_wht_p=1,
-#                                 show_plot=False,minval=-np.inf,fudge_center_pre=False,
-#                                 fudge_center_post=False,
-#                                 finalmin=-np.inf,inplace=True):
-#     assert sky_locations is not None or pixel_locations is not None, "Must give skycoord or pixel."
-#     #sys.path.append('/Users/jpierel/CodeBase/manuscript_jupyter/pearls_sn/background_sub')
-#     #import MIRIMBkgInterp
-#     mbi = MIRIMBkgInterp()
 
-#     mbi.src_x = (width+2-1)/2
-#     mbi.src_y = (width+2-1)/2
-#     mbi.aper_rad = 3 # radius of aperture around source
-#     mbi.ann_width = 3 # width of annulus to compute interpolation from
-#     mbi.bkg_mode=bkg_mode # type of interpolation. Options "none","simple","polynomial"
-#     mbi.combine_fits = True # use the simple model to attenuate the polynomial model
-#     mbi.degree = degree # degree of polynomial fit
-#     mbi.h_wht_s = h_wht_s # horizontal weight of simple model
-#     mbi.v_wht_s = v_wht_s # vertical weight of simple model
-#     mbi.h_wht_p = h_wht_p # horizontal weight of polynomial model
-#     mbi.v_wht_p = v_wht_p # vertical weight of simple model
-#     if pixel_locations is None and not isinstance(sky_locations,(list,tuple,np.ndarray)):
-#         sky_locations = [sky_locations]*st_obs.n_exposures
-#     elif isinstance(pixel_locations[0],(int,float)):
-#         pixel_locations = [pixel_locations]*st_obs.n_exposures
+def mjd_dict_from_list(filelist, tolerance=0):
+    """
+    Group a list of FITS files by their observation date.
 
-#     final_pixels = []
-#     nests = []
-#     for i in range(st_obs.n_exposures):
-#         if pixel_locations is None:
-#             if st_obs.n_exposures==1:
-#                 wcs = st_obs.wcs
-#             else:
-#                 wcs = st_obs.wcs_list[i]
-#             x,y = wcs.world_to_pixel(sky_locations[i])
-#             x = int(x)
-#             y = int(y)
-#         else:
-#             x,y = pixel_locations[i]
-#             x = int(x)
-#             y = int(y)
-#         #print(x,y)
-#         width+=2
-#         if st_obs.n_exposures==1:
-#             cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                     x-int((width-1)/2):x+int((width-1)/2)+1]
-#         else:
-#             cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                     x-int((width-1)/2):x+int((width-1)/2)+1]
+    Files are grouped by rounding their MJD keyword (MJD-AVG or EXPSTART)
+    to a given number of decimal places.
 
+    Parameters
+    ----------
+    filelist : list of str
+        List of FITS filenames.
+    tolerance : int, optional
+        Number of decimal places to keep when rounding the MJD. Files whose
+        rounded MJD match are grouped together.
 
-
-
-#         cutout[cutout<minval] = np.nan
-
-#         if fudge_center_pre:
-#             init_center = int((width-1)/2)
-#             #plt.imshow(cutout)
-#             #plt.show()
-#             #plt.imshow(cutout[init_center-1:init_center+2,init_center-1:init_center+2])
-#             #plt.show()
-#             maxcell = np.argmax(cutout[init_center-1:init_center+2,init_center-1:init_center+2])
-#             max_ind = np.unravel_index(maxcell,(3,3))
-#             x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
-#             #print(x,y)
-#             if st_obs.n_exposures==1:
-#                 cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
-#             else:
-#                 cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
-
-#         final_pixels.append([y,x])
-
-
-
-
-
-#         # run interpolation
-#         if not do_fit:
-#             diff, bkg, mask = mbi.run(cutout)
-
-#         else:
-#             (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
-#             nests.append(result_nest)
-
-#         if fudge_center_post:
-#             width-=2
-#             nests = nests[:-1]
-#             final_pixels = final_pixels[:-1]
-#             init_center = int((width-1)/2)
-
-#             maxcell = np.argmax(diff[0][init_center-1:init_center+2,init_center-1:init_center+2])
-#             max_ind = np.unravel_index(maxcell,(3,3))
-
-#             x,y = np.array([x,y]) + (np.flip(max_ind)-np.array([1,1]))
-#             width+=2
-
-#             if st_obs.n_exposures==1:
-#                 cutout = st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
-#             else:
-#                 cutout = st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                         x-int((width-1)/2):x+int((width-1)/2)+1]
-#             final_pixels.append([y,x])
-#             if not do_fit:
-#                 diff, bkg, mask = mbi.run(cutout)
-
-#             else:
-#                 (diff, bkg, mask), result_nest = mbi.run_opt(cutout)
-#                 nests.append(result_nest)
-#         width-=2
-#         if show_plot:
-#             norm = astropy.visualization.simple_norm(cutout[1:-1,1:-1],invalid=0)
-#             fig, axes = plt.subplots(1,4,figsize=(12,5))
-#             axes[0].set_title('image')
-#             axes[0].imshow(cutout[1:-1,1:-1],origin='lower',norm=norm,cmap='viridis')
-#         #print(np.nanmedian(diff[0]))
-#         #print(np.nanmedian(bkg[0]))
-#         #print(np.nanmedian(mask[0]))
-#         #print()
-#         #print()
-
-#         for n in range(int((width-1)/2)-1,int((width-1)/2)+2):
-#             for j in range(int((width-1)/2)-1,int((width-1)/2)+2):
-#                 if diff[0][n][j]<finalmin:
-#                     diff[0][n][j] = 0
-#         if inplace:
-#             if st_obs.pipeline_level==3:
-#                 st_obs.data[y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                         x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
-#             else:
-#                 st_obs.data_arr_pam[i][y-int((width-1)/2):y+int((width-1)/2)+1,
-#                                     x-int((width-1)/2):x+int((width-1)/2)+1] = diff[0]
-
-#         if show_plot:
-
-
-
-
-#             axes[1].set_title('masked')
-#             axes[1].imshow(mask[0],origin='lower',norm=norm,cmap='viridis')
-
-#             axes[2].set_title('bkg')
-#             im1 = axes[2].imshow(bkg[0],origin='lower',norm=norm,cmap='viridis')
-#             divider = make_axes_locatable(axes[2])
-#             cax = divider.append_axes('right', size='5%', pad=0.05)
-#             fig.colorbar(im1, cax=cax, orientation='vertical')
-#             axes[3].set_title('bkg sub')
-#             norm = astropy.visualization.simple_norm(diff[0],invalid=0)
-#             im2 = axes[3].imshow(diff[0],origin='lower',norm=norm,cmap='seismic')
-#             divider2 = make_axes_locatable(axes[3])
-#             cax2 = divider2.append_axes('right', size='5%', pad=0.05)
-#             fig.colorbar(im2, cax=cax2, orientation='vertical')
-#             plt.show()
-#     if inplace:
-#         st_obs.fancy_background_centers = final_pixels
-#         st_obs.fancy_bkg_diff = mask[0]-bkg[0]
-#         st_obs.fancy_bkg = bkg[0]
-#         return st_obs,nests,mbi
-#     return bkg[0],diff[0]
-
-def mjd_dict_from_list(filelist,tolerance=0):
+    Returns
+    -------
+    mjd_dict : dict
+        Dictionary mapping rounded MJD values to lists of filenames.
+    """
     mjd_dict = {}
-    for f in filelist:
-        dat = astropy.io.fits.open(f)
-        try:
-            mjd = dat[0].header['MJD-AVG']
-        except:
-            mjd = dat[0].header['EXPSTART']
-        mjd_key = np.round(mjd,tolerance)
-        if mjd_key not in mjd_dict.keys():
-            mjd_dict[mjd_key] = []
-        mjd_dict[mjd_key].append(f)
+    for fname in filelist:
+        with fits.open(fname) as dat:
+            try:
+                mjd = dat[0].header["MJD-AVG"]
+            except Exception:
+                mjd = dat[0].header["EXPSTART"]
+
+        mjd_key = np.round(mjd, tolerance)
+        mjd_dict.setdefault(mjd_key, []).append(fname)
+
     return mjd_dict
 
-def filter_dict_from_list(filelist,sky_location=None,ext=1):
+
+def filter_dict_from_list(
+    filelist,
+    sky_location=None,
+    ext=0,
+    buffer=0.0,
+):
+    """
+    Group FITS files by FILTER keyword, with an optional check that a
+    given sky position lies on the detector and is at least `buffer`
+    pixels away from its edges.
+
+    Parameters
+    ----------
+    filelist : list of str
+        FITS filenames.
+    sky_location : astropy.coordinates.SkyCoord or None, optional
+        If provided, only include files in which this sky position can
+        be transformed to valid detector pixel coordinates.
+    ext : int, optional
+        FITS extension to read the WCS / FILTER keyword from.
+    buffer : float, optional
+        Required minimum distance (in pixels) between the derived pixel
+        coordinate and all image edges. Default: 0 (no edge exclusion).
+
+        A file is only included if:
+            buffer <= x <= nx - 1 - buffer
+            buffer <= y <= ny - 1 - buffer
+
+    Returns
+    -------
+    filt_dict : dict
+        Dictionary mapping filter name → list of filenames.
+    """
     filt_dict = {}
-    for f in filelist:
-        dat = astropy.io.fits.open(f)
-        if sky_location is not None:
-            imwcs = astropy.wcs.WCS(dat[ext],dat)
 
-            y,x = imwcs.world_to_pixel(sky_location)
-    
-            if not (0<x<dat[ext].data.shape[0] and 0<y<dat[ext].data.shape[1]):
-                continue
+    for fname in filelist:
+        try:
+            with fits.open(fname) as hdul:
+                header = hdul[ext].header
+                filt = header.get("FILTER")
+                if filt is None:
+                    continue
 
-        if 'FILTER' in dat[0].header.keys():
-            filt = dat[0].header['FILTER']
-        elif 'FILTER1' in dat[0].header.keys():
-            if 'CLEAR' in dat[0].header['FILTER1']:
-                filt = dat[0].header['FILTER2']
-            else:
-                filt = dat[0].header['FILTER1']
-        elif 'FILTER' in dat[ext].header.keys():
-            filt = dat[ext].header['FILTER']
-        else:
-            print('Cannot find FILTER keyword')
-            return
-        if filt not in filt_dict.keys():
-            filt_dict[filt] = []
-        filt_dict[filt].append(f)
+                # If sky check requested…
+                if sky_location is not None:
+                    try:
+                        w = wcs.WCS(header)
+                        x, y = w.world_to_pixel(sky_location)
+                    except Exception:
+                        # WCS transform failed → exclude file
+                        continue
+
+                    # Reject NaNs or infs
+                    if not np.isfinite(x) or not np.isfinite(y):
+                        continue
+
+                    # Image shape for bounds check
+                    ny, nx = hdul[ext].data.shape
+
+                    # Pixel must lie inside detector and outside edge buffer
+                    if (
+                        x < buffer
+                        or y < buffer
+                        or x > nx - 1 - buffer
+                        or y > ny - 1 - buffer
+                    ):
+                        continue
+
+                # Passed all checks → add file
+                filt_dict.setdefault(filt, []).append(fname)
+
+        except Exception:
+            # unreadable FITS, bad header, etc — ignore
+            continue
+
     return filt_dict
+
+
 
 def stpsf_setup_sim_to_match_file(filename_or_HDUList, verbose=True, plot=False,dateobs=None):
     """ Setup a stpsf Instrument instance matched to a given
@@ -378,7 +311,20 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
         psf_list.append(epsf_model)
     return psf_list
 
-def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_outdir='.'):
+def get_jwst3_psf_spike(st_obs,st_obs3,sky_location,temp_outdir='.',verbose=True,psf_width=31):
+    try:
+        import spike
+    except:
+        raise RuntimeError('Must have spike-psf for level 3 psfs.')
+    psf_drz = spike.psf.jwst(os.path.basename(st_obs.exposure_fnames[0]), '%f %f'%(sky_location.ra.value,sky_location.dec.value), 
+        st_obs3.instrument, img_type = os.path.splitext(st_obs.exposure_fnames[0])[1], camera = None, method = 'WebbPSF', usermethod = None, 
+                overwrite=True, savedir = temp_outdir, drizzleimgs = False, objonly = True, pretweaked = True, usecrds = True,
+                keeporig = False, plot = False, verbose = verbose, parallel = False, out = 'fits', returnpsf = 'crop', cutout_fov = psf_width, savecutout = False, 
+                finalonly = True, removedir = temp_outdir, tweakparams = {}, 
+                drizzleparams = {'pixel_scale':st_obs3.pixel_scale, 'output_wcs': st_obs3.wcs})
+    return(psf_drz)
+
+def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdir='.'):
     with open('./stpipe-log.cfg','w') as f:
         s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
         f.write(s)
@@ -441,7 +387,40 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         with open(os.path.join(outdir,'cal_data_asn.json'),"w") as outfile:
             name, serialized = asn.dump(format='json')
             outfile.write(serialized)
+
+        ref_image = fits.open(st_obs3.fname)['SCI',1]
+        ref_dm = datamodels.open(st_obs3.fname)
+        ref_wcs = wcs.WCS(ref_image)
+        transform = make_fitswcs_transform(ref_image.header) 
+        # 3. Define frames
+        detector_frame = cf.Frame2D(
+            name="detector",
+            axes_names=("x", "y"),
+            unit=(u.pix, u.pix),
+        )
+
+        sky_frame = cf.CelestialFrame(
+            name="icrs",
+            reference_frame=coord.ICRS(),
+            unit=(u.deg, u.deg),
+        )
+        # 4. Build the GWCS pipeline
+        pipeline = [(detector_frame, transform), (sky_frame, None)]
+        gw = gwcs.WCS(pipeline)
+
+        ny,nx = ref_image.data.shape
+
+        # 5. Set bounding box
+        # NOTE: GWCS uses "F" order: ((xmin, xmax), (ymin, ymax)) for (x, y) axes
+        gw.bounding_box = ((0, nx), (0, ny))
+
+        #ref_wcs = #gwcs.wcs.WCS(ref_image)
+        tree = {"wcs": gw}
+        wcs_file = AsdfFile(tree)
+        wcs_file.write_to(os.path.join(temp_outdir,'ref_wcs.asdf'))
+        
         pipe3 = Image3Pipeline()
+        pipe3.resample.output_wcs = os.path.join(temp_outdir,'ref_wcs.asdf')
         pipe3.output_dir = outdir
         pipe3.save_results = True
         pipe3.tweakreg.skip = True
@@ -452,6 +431,7 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         pipe3.outlier_detection.save_results = False
         #pipe3.resample.output_shape = (dat['SCI',1].data.shape)
         pipe3.resample.pixel_scale = st_obs3.pixel_scale#/4#[0]#/4
+
         #pipe3.resample.pixel_scale_ratio = st_obs3.pixel_scale/st_obs.pixel_scale[0]
         pipe3.run(os.path.join(outdir,'cal_data_asn.json'))
 
@@ -474,26 +454,6 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=16,psf_width=101,temp_out
         mx,my = np.meshgrid(np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(x+.5),
                             np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
 
-
-        #print(np.sum(level3[mx,my]))
-
-
-        #kernel = astropy.convolution.Box2DKernel(width=4)
-
-        #level3 = astropy.convolution.convolve(level3, kernel)
-
-        #s = np.sum(level3[mx,my])
-        #level3[mx,my]/=np.sum(level3[mx,my])
-        #level3[mx,my]*=16
-        #print((np.median(level2_sums)/np.sum(level3[mx,my])*(st_obs3.pixel_scale/np.median(st_obs.pixel_scale))))
-        #level3[mx,my]*=(np.median(level2_sums)/np.sum(level3[mx,my])*(st_obs3.pixel_scale/np.median(st_obs.pixel_scale)))
-        #print(np.sum(level3[mx,my]))
-        #level3[mx,my]*=16**2
-
-        #level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False,
-        #                                              oversampling=4)
-        #import pdb
-        #pdb.set_trace()
 
 
         level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False,
@@ -697,9 +657,7 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         mx2,my2 = np.meshgrid(np.arange(-1*psf_width/2,psf_width/2*1+1,1).astype(int)+int(x+.5),
                             np.arange(-1*psf_width/2,psf_width/2*1+1,1).astype(int)+int(y+.5))
 
-        plt.imshow(level3[mx2,my2])
-        plt.scatter(12.5,12.5)
-        plt.show()
+        
 
         level3_sum = simple_aperture_sum(level3,[y,x],5.6*4)
 
@@ -724,110 +682,171 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         shutil.rmtree(outdir)
     return level3_psf
 
+def jwst_apcorr_interp(fname, radius, alternate_ref: Optional[str] = None):
+    """
+    Interpolate JWST imaging aperture correction as a function of aperture radius (pixels),
+    bypassing JWST pipeline step machinery.
 
-def jwst_apcorr_interp(fname,radius,alternate_ref=None):
-    import scipy
-    with open('stpipe-log.cfg','w') as f:
-        s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
-        f.write(s)
-    sc = source_catalog.source_catalog_step.SourceCatalogStep()
-    os.remove('stpipe-log.cfg')
-    if alternate_ref is not None:
-        fname = alternate_ref
+    Parameters
+    ----------
+    fname : str
+        JWST image (e.g. *_cal.fits, *_i2d.fits) used to select the correct APCORR ref.
+    radius : float
+        Aperture radius in PIXELS.
+    alternate_ref : str, optional
+        If provided, use this file to select the APCORR reference, or pass an APCORR file
+        directly (convenience) if its name/path contains 'apcorr'.
 
-    all_ees = []
-    all_inner = []
-    all_outer = []
-    all_corr = []
-    all_radius = []
-    with datamodels.open(fname) as model:
-        reffile_paths = sc._get_reffile_paths(model)
-        for ees in [(10,20,30),(40,50,60),(70,80,90)]:
+    Returns
+    -------
+    tuple
+        (ee_percent, apcorr, skyin_pix, skyout_pix)
 
-            refdata = reference_data.ReferenceData(model, reffile_paths,
-                            ees)
-            try:
-                aperture_params = refdata.aperture_params
-                all_ees = np.append(all_ees,ees)
-                all_radius = np.append(all_radius,aperture_params['aperture_radii'])
-                all_corr = np.append(all_corr,aperture_params['aperture_corrections'])
-            except:
-                if ees[0]==10:
-                    tempees = np.append(ees[1:],[40]).ravel()
-                    refdata = reference_data.ReferenceData(model, reffile_paths,
-                            tempees)
-                    aperture_params = refdata.aperture_params
-                    all_ees = np.append(all_ees,ees[1:])
-                    all_radius = np.append(all_radius,aperture_params['aperture_radii'][:2])
-                    all_corr = np.append(all_corr,aperture_params['aperture_corrections'][:2])
-                elif ees[-1]==90:
-                    tempees = np.append([60],ees[:2]).ravel()
-                    refdata = reference_data.ReferenceData(model, reffile_paths,
-                            tempees)
-                    aperture_params = refdata.aperture_params
-                    all_ees = np.append(all_ees,ees[1:])
-                    all_radius = np.append(all_radius,aperture_params['aperture_radii'][1:])
-                    all_corr = np.append(all_corr,aperture_params['aperture_corrections'][1:])
+        - ee_percent: interpolated EE in percent (0–100)
+        - apcorr: interpolated aperture correction factor
+        - skyin_pix, skyout_pix: recommended background annulus radii in pixels
+    """
+    radius = float(radius)
+    if radius <= 0:
+        raise ValueError(f"radius must be positive (pixels), got {radius}")
 
+    with datamodels.open(alternate_ref or fname) as model:
 
-    if radius>np.max(all_radius):
-        print('Your radius is larger than the largest allowed radius of %f pixels'%np.max(all_radius))
-        return
-
-    apcorr = scipy.interpolate.interp1d(all_radius,all_corr)(radius)
-    ee_interp = scipy.interpolate.interp1d(all_radius,all_ees)(radius)
-
-    return float(ee_interp), apcorr, aperture_params['bkg_aperture_inner_radius'], aperture_params['bkg_aperture_outer_radius']
-
-def jwst_apcorr(fname,ee=70,alternate_ref=None):
-    with open('./stpipe-log.cfg','w') as f:
-        s = '[*]\nhandler = file:/dev/null\nlevel = INFO\n'
-        f.write(s)
-    sc = source_catalog.source_catalog_step.SourceCatalogStep()
-    os.remove('stpipe-log.cfg')
-    if alternate_ref is not None:
-        fname = alternate_ref
-    with datamodels.open(fname) as model:
-        reffile_paths = sc._get_reffile_paths(model)
-        if ee==10:
-            ees = (10,20,30)
-            refdata = reference_data.ReferenceData(model, reffile_paths,
-                                ees)
-            aperture_params = refdata.aperture_params
-            return [aperture_params['aperture_radii'][0],
-           aperture_params['aperture_corrections'][0],
-           aperture_params['bkg_aperture_inner_radius'],
-           aperture_params['bkg_aperture_outer_radius']]
-        elif ee==20:
-            ees = (20,30,40)
-            refdata = reference_data.ReferenceData(model, reffile_paths,
-                                ees)
-            aperture_params = refdata.aperture_params
-            return [aperture_params['aperture_radii'][0],
-           aperture_params['aperture_corrections'][0],
-           aperture_params['bkg_aperture_inner_radius'],
-           aperture_params['bkg_aperture_outer_radius']]
-        elif ee==30:
-            ees = (20,30,40)
-            refdata = reference_data.ReferenceData(model, reffile_paths,
-                                ees)
-            aperture_params = refdata.aperture_params
-            return [aperture_params['aperture_radii'][1],
-           aperture_params['aperture_corrections'][1],
-           aperture_params['bkg_aperture_inner_radius'],
-           aperture_params['bkg_aperture_outer_radius']]
-
+        # Determine APCORR reference file
+        if alternate_ref and alternate_ref.lower().endswith((".asdf", ".fits")) and "apcorr" in alternate_ref.lower():
+            apcorr_path = alternate_ref
         else:
-            ees = (20,30,ee)
-            refdata = reference_data.ReferenceData(model, reffile_paths,
-                                ees)
-            aperture_params = refdata.aperture_params
-            return [aperture_params['aperture_radii'][-1],
-           aperture_params['aperture_corrections'][-1],
-           aperture_params['bkg_aperture_inner_radius'],
-           aperture_params['bkg_aperture_outer_radius']]
+            apcorr_path = _get_best_apcorr_reffile(model)
+
+        with datamodels.open(apcorr_path) as apm:
+            tab = apm.apcorr_table  # often a numpy recarray
+            names = tab.dtype.names
+
+            # Instrument selection keys
+            filt = (model.meta.instrument.filter or "").upper()
+            pup = (model.meta.instrument.pupil or "").upper()
+
+            # Build mask for this filter/pupil
+            filt_col = np.array([str(x).upper() for x in tab["filter"]])
+            m = (filt_col == filt)
+
+            if "pupil" in names and pup:
+                pup_col = np.array([str(x).upper() for x in tab["pupil"]])
+                m &= (pup_col == pup)
+
+            if not np.any(m):
+                # relax pupil if needed
+                m2 = (filt_col == filt)
+                if np.any(m2):
+                    m = m2
+                else:
+                    raise ValueError(
+                        f"No APCORR rows match FILTER={filt!r}, PUPIL={pup!r}. Ref: {apcorr_path}"
+                    )
+
+            sub = tab[m]
+
+            # Collect arrays
+            r = np.array(sub["radius"], dtype=float)        # pixels
+            c = np.array(sub["apcorr"], dtype=float)
+            ee_frac = np.array(sub["eefraction"], dtype=float)
+
+            # Get background annulus values.
+            # Many ref tables keep skyin/skyout constant for the whole filter/pupil,
+            # but we safely pick the first.
+            skyin = float(np.array(sub["skyin"], dtype=float)[0])
+            skyout = float(np.array(sub["skyout"], dtype=float)[0])
+
+            # Sort by radius (interp1d requires monotonic x)
+            idx = np.argsort(r)
+            r = r[idx]
+            c = c[idx]
+            ee_frac = ee_frac[idx]
+
+            # Radius bounds
+            rmin, rmax = float(np.nanmin(r)), float(np.nanmax(r))
+            if radius < rmin or radius > rmax:
+                raise ValueError(
+                    f"radius={radius} px is outside APCORR bounds [{rmin}, {rmax}] px "
+                    f"for FILTER={filt}, PUPIL={pup}. Ref: {apcorr_path}"
+                )
+
+            # Interpolate (linear; matches your prior behavior)
+            apcorr = float(scipy.interpolate.interp1d(r, c)(radius))
+            ee_percent = float(scipy.interpolate.interp1d(r, ee_frac)(radius) * 100.0)
+
+            return ee_percent, apcorr, skyin, skyout
 
 
+
+def _get_best_apcorr_reffile(model) -> str:
+    hdr = model.to_flat_dict()
+    ctx = crds.get_context_name("jwst")
+    return crds.getreferences(hdr, reftypes=["apcorr"], context=ctx)["apcorr"]
+
+
+def jwst_apcorr(
+    fname: str,
+    ee: float = 70,
+    alternate_ref: Optional[str] = None,
+):
+    """
+    Lookup JWST imaging aperture correction directly from the APCORR reference file,
+    bypassing the JWST pipeline machinery.
+
+    Parameters
+    ----------
+    fname : str
+        JWST image (e.g. *_cal.fits, *_i2d.fits).
+    ee : float
+        Encircled energy percentage (e.g. 70 for 70% EE).
+    alternate_ref : str, optional
+        If provided, use this file to select the APCORR reference.
+
+    Returns
+    -------
+    list
+        [radius_pix, apcorr, skyin_pix, skyout_pix]
+    """
+    ee_fraction = float(ee) / 100.0
+
+    with datamodels.open(alternate_ref or fname) as model:
+
+        if alternate_ref and alternate_ref.lower().endswith((".asdf", ".fits")) and "apcorr" in alternate_ref.lower():
+            apcorr_path = alternate_ref
+        else:
+            apcorr_path = _get_best_apcorr_reffile(model)
+
+        with datamodels.open(apcorr_path) as apm:
+            tab = apm.apcorr_table
+            names = tab.dtype.names
+
+            filt = (model.meta.instrument.filter or "").upper()
+            pup = (model.meta.instrument.pupil or "").upper()
+
+            filt_col = np.array([str(x).upper() for x in tab["filter"]])
+            ee_col = np.array(tab["eefraction"], dtype=float)
+
+            m = (filt_col == filt) & np.isclose(ee_col, ee_fraction)
+
+            if "pupil" in names and pup:
+                pup_col = np.array([str(x).upper() for x in tab["pupil"]])
+                m &= (pup_col == pup)
+
+            if not np.any(m):
+                raise ValueError(
+                    f"No APCORR match for FILTER={filt}, PUPIL={pup}, EE={ee}% "
+                    f"in ref file {apcorr_path}"
+                )
+
+            row = tab[m][0]
+
+            return [
+                float(row["radius"]),
+                float(row["apcorr"]),
+                float(row["skyin"]),
+                float(row["skyout"]),
+            ]
 
 
 def estimate_bkg(data,position,inner, outer,model_psf=None,corr=None):
@@ -851,39 +870,82 @@ def estimate_bkg(data,position,inner, outer,model_psf=None,corr=None):
     plt.show()
     sys.exit()
 
-def generic_aperture_phot(data,positions,radius,sky,epadu=1,error=None):
+def generic_aperture_phot(data, positions, radius, sky, epadu=1, error=None):
+    """
+    Perform circular aperture photometry with a local sky annulus.
+
+    Parameters
+    ----------
+    data : ndarray
+        2D image array.
+    positions : array_like
+        Position(s) in pixel coordinates (x, y).
+    radius : float
+        Aperture radius in pixels.
+    sky : dict
+        Dictionary with keys 'sky_in' and 'sky_out' giving inner and outer
+        radii of the sky annulus in pixels.
+    epadu : float, optional
+        Electrons per ADU for Poisson error estimation.
+    error : ndarray or None, optional
+        Per-pixel 1-sigma uncertainties. If provided, photutils will use this
+        for error propagation; otherwise we estimate errors from Poisson +
+        sky scatter.
+
+    Returns
+    -------
+    phot : astropy.table.Table
+        Photometry table with at least the following columns:
+        'aperture_sum', 'annulus_median', 'aper_bkg',
+        'aper_sum_bkgsub', and 'aperture_sum_err' if error is None.
+    """
     aperture = CircularAperture(positions, r=radius)
-    annulus_aperture = CircularAnnulus(positions, r_in=sky["sky_in"], r_out=sky["sky_out"])
-    annulus_mask = annulus_aperture.to_mask(method='center')
+    annulus_aperture = CircularAnnulus(
+        positions, r_in=sky["sky_in"], r_out=sky["sky_out"]
+    )
+    annulus_mask = annulus_aperture.to_mask(method="center")
 
     bkg_median = []
     bkg_stdev = []
+
     for mask in annulus_mask:
         try:
             annulus_data = mask.multiply(data)
             annulus_data_1d = annulus_data[mask.data > 0]
             _, median_sigclip, stdev_sigclip = sigma_clipped_stats(annulus_data_1d)
-        except:
+        except Exception:
             median_sigclip = np.nan
             stdev_sigclip = np.nan
         bkg_median.append(median_sigclip)
         bkg_stdev.append(stdev_sigclip)
-    bkg_median = np.array(bkg_median)#32.672334253787994#33#
 
+    bkg_median = np.array(bkg_median)
     bkg_stdev = np.array(bkg_stdev)
 
-    phot = aperture_photometry(data, aperture, method='exact',error=error)
-    phot['annulus_median'] = bkg_median
-    phot['aper_bkg'] = bkg_median * aperture.area
-    phot['aper_sum_bkgsub'] = phot['aperture_sum'] - phot['aper_bkg']
-    if error is None:
-        error_poisson = np.sqrt(phot['aper_sum_bkgsub'])
-        error_scatter_sky = aperture.area * bkg_stdev**2
-        error_mean_sky = bkg_stdev**2 * aperture.area**2 / annulus_aperture.area
+    phot = aperture_photometry(data, aperture, method="exact", error=error)
+    phot["annulus_median"] = bkg_median
+    phot["aper_bkg"] = bkg_median * aperture.area
+    phot["aper_sum_bkgsub"] = phot["aperture_sum"] - phot["aper_bkg"]
 
-        fluxerr = np.sqrt(error_poisson**2/epadu + error_scatter_sky + error_mean_sky)
-        phot['aperture_sum_err'] = fluxerr
+    if error is None:
+        # Poisson error on background-subtracted counts
+        error_poisson = np.sqrt(phot["aper_sum_bkgsub"])
+        # Scatter inside the sky annulus
+        error_scatter_sky = aperture.area * bkg_stdev**2
+        # Error on the mean sky level
+        error_mean_sky = (
+            bkg_stdev**2 * aperture.area**2 / annulus_aperture.area
+        )
+
+        fluxerr = np.sqrt(
+            (error_poisson**2) / epadu
+            + error_scatter_sky
+            + error_mean_sky
+        )
+        phot["aperture_sum_err"] = fluxerr
+
     return phot
+
 
 
 def jwst_aperture_phot(fname,ra,dec,
@@ -1028,7 +1090,26 @@ def hst_aperture_phot(fname,force_ra,force_dec,filt,radius=3,
     phot['mag'] = -2.5*np.log10(phot['aper_sum_corrected']) + zp
     return(phot)
 
-def simple_aperture_sum(data,positions,radius):
+def simple_aperture_sum(data, positions, radius):
+    """
+    Compute a simple circular-aperture sum at one or more positions.
+
+    Parameters
+    ----------
+    data : ndarray
+        2D image array.
+    positions : array_like
+        Position or list of positions in pixel coordinates. Follows the
+        photutils convention (x, y).
+    radius : float
+        Aperture radius in pixels.
+
+    Returns
+    -------
+    aperture_sum : astropy.table.Column
+        The 'aperture_sum' column from photutils.aperture_photometry.
+    """
     aperture = CircularAperture(positions, r=radius)
-    phot = aperture_photometry(data, aperture, method='exact')
-    return phot['aperture_sum']
+    phot = aperture_photometry(data, aperture, method="exact")
+    return phot["aperture_sum"]
+
