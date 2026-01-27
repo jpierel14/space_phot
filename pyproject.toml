@@ -8,40 +8,33 @@ name = "space_phot"
 version = "0.3.8"
 description = "Aperture and PSF photometry tools for HST and JWST data."
 authors = [
-    { name = "Justin Pierel", email = "jpierel@stsci.edu" }
+  { name = "Justin Pierel", email = "jpierel@stsci.edu" }
 ]
 license = { text = "" }
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 
 dependencies = [
-  numpy>=1.23
-  scipy>=1.9,
-
-  astropy>=7.1.1,
-  photutils>=2.3,
-
-  matplotlib>=3.7,
-
-  sncosmo>=2.12.1,
-  dynesty>=3.0.0,
-  dill>=0.3.6,
-  corner>=2.2,
-
-  stpsf>=2.1,
-  poppy>=1.1.2,
-
-  stsci.skypac>=1.0,
-
-  # JWST stack (you *are* importing jwst + datamodels + pipeline bits)
-  jwst>=1.19,
-  stdatamodels>=4.0.1,
-  stpipe>=0.10.0,
-  gwcs>=0.25.2,
-  asdf>=4.5.0,
-  stsci.skypac>=1.0.11,
-  pytest]
-
+  "numpy>=1.23",
+  "scipy>=1.9",
+  "astropy>=7.1.1",
+  "photutils>=2.3",
+  "matplotlib>=3.7",
+  "sncosmo>=2.12.1",
+  "dynesty>=3.0.0",
+  "dill>=0.3.6",
+  "corner>=2.2",
+  "stpsf>=2.1",
+  "poppy>=1.1.2",
+  "stsci.skypac>=1.0.11",
+  "pamutils",
+  # JWST stack (only keep these if importing them at runtime)
+  "jwst>=1.19",
+  "stdatamodels>=4.0.1",
+  "stpipe>=0.10.0",
+  "gwcs>=0.25.2",
+  "asdf>=4.5.0",
+]
 
 [project.optional-dependencies]
 test = [
@@ -49,16 +42,15 @@ test = [
   "pytest-cov>=4.1",
 ]
 
-
 docs = [
   "sphinx>=7",
   "sphinx-rtd-theme",
   "sphinx-gallery",
   "numpydoc",
-  "matplotlib",
-  "sphinx-exec-code"
+  "sphinx-exec-code",
+  # If examples / docs import these, include them here too:
+  "astroquery",
 ]
-
 
 dev = [
   "ruff>=0.5",
@@ -66,6 +58,7 @@ dev = [
   "isort>=5.13",
   "pre-commit>=3.7",
 ]
+
 
 
 [project.urls]
