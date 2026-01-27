@@ -46,11 +46,17 @@ if (len(hst_files) == 0) and RUN_NETWORK:
     obs_table = obs_table[obs_table["filters"] == "F110W"]
 
     prods = Observations.get_product_list(obs_table)
+
     prods = prods[prods["calib_level"] == 2]
     prods = prods[prods["productSubGroupDescription"] == "FLT"]
 
+    prods3 = prods[prods["calib_level"] == 3]
+    prods3 = prods3[prods3["productSubGroupDescription"] == "DRZ"]
+
     Observations.download_products(prods[:3], extension="fits")
-    hst_files = sorted(glob.glob("mastDownload/HST/*/*flt.fits"))
+    Observations.download_products(prods3, extension="fits")
+    hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
+                            sn_hst)['F110W'])
 
 if len(hst_files) == 0:
     raise RuntimeError(
@@ -111,8 +117,13 @@ if (len(jwst_files) == 0) and RUN_NETWORK:
     prods = prods[prods["calib_level"] == 2]
     prods = prods[prods["productSubGroupDescription"] == "CAL"]
 
-    Observations.download_products(prods[:4], extension="fits")
-    jwst_files = sorted(glob.glob("mastDownload/JWST/*/*cal.fits"))
+    prods3 = prods[prods["calib_level"] == 3]
+    prods3 = prods3[prods3["productSubGroupDescription"] == "I2D"]
+
+    Observations.download_products(prods, extension="fits")
+    Observations.download_products(prods3, extension="fits")
+    jwst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/JWST/*/*cal.fits"),
+                            sn_jwst)['F150W'])
 
 if len(jwst_files) == 0:
     raise RuntimeError(
