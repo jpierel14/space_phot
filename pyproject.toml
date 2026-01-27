@@ -27,7 +27,6 @@ dependencies = [
   "stpsf>=2.1",
   "poppy>=1.1.2",
   "stsci.skypac>=1.0.11",
-  "pamutils",
   # JWST stack (only keep these if importing them at runtime)
   "jwst>=1.19",
   "stdatamodels>=4.0.1",
