@@ -1,26 +1,26 @@
 numpy>=1.23
 scipy>=1.9
 
-astropy>=5.2
-photutils>=1.9
+astropy>=7.1.1
+photutils>=2.3
 
 matplotlib>=3.7
 
-sncosmo>=2.10
-dynesty>=2.1
+sncosmo>=2.12.1
+dynesty>=3.0.0
 dill>=0.3.6
 corner>=2.2
 
-stpsf>=2.0
-poppy>=1.1
+stpsf>=2.1
+poppy>=1.1.2
 
 stsci.skypac>=1.0
 
 # JWST stack (you *are* importing jwst + datamodels + pipeline bits)
-jwst>=1.12
-stdatamodels>=1.9
-stpipe>=0.5
-gwcs>=0.20
-asdf>=2.15
-stsci.skypac>=1.0
+jwst>=1.19
+stdatamodels>=4.0.1
+stpipe>=0.10.0
+gwcs>=0.25.2
+asdf>=4.5.0
+stsci.skypac>=1.0.11
 pytest
