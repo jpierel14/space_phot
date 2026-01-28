@@ -36,19 +36,21 @@ if RUN_NETWORK:
 
     prods = Observations.get_product_list(obs_table)
 
-    prods = prods[prods["calib_level"] == 2]
-    prods = prods[prods["productSubGroupDescription"] == "FLT"]
-
     prods3 = prods[prods["calib_level"] == 3]
     prods3 = prods3[prods3["productSubGroupDescription"] == "DRZ"]
+
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "FLT"]
 
     Observations.download_products(prods, extension="fits")
     Observations.download_products(prods3, extension="fits")
     hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
                             sn_hst)['F110W'])
+    hst_files = [x for x in hst_files if 'skycell' not in x]
 else:
     hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
                             sn_hst)['F110W'])
+    hst_files = [x for x in hst_files if 'skycell' not in x]
 if len(hst_files) == 0:
     raise RuntimeError(
         "No HST files found. Pre-download or set SPACE_PHOT_DOCS_NETWORK=1."
@@ -85,11 +87,11 @@ if RUN_NETWORK:
     obs_table = Observations.query_criteria(obs_id=jwst_obs_id)
     prods = Observations.get_product_list(obs_table)
 
-    prods = prods[prods["calib_level"] == 2]
-    prods = prods[prods["productSubGroupDescription"] == "CAL"]
-
     prods3 = prods[prods["calib_level"] == 3]
     prods3 = prods3[prods3["productSubGroupDescription"] == "I2D"]
+
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "CAL"]
 
     Observations.download_products(prods, extension="fits")
     Observations.download_products(prods3, extension="fits")
@@ -123,6 +125,7 @@ print(obs_jwst.aperture_result.phot_cal_table)
 # Level 3 HST products are typically drizzled: ``*_drz.fits`` or ``*_drc.fits``.
 
 hst_lvl3_files = sorted(glob.glob("mastDownload/HST/*/*dr?.fits"))
+hst_lvl3_files = [x for x in hst_lvl3_files if 'skycell' not in x]
 # glob pattern *dr?.fits matches *drz.fits and *drc.fits
 
 if len(hst_lvl3_files) == 0:

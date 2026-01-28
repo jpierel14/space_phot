@@ -40,11 +40,12 @@ if RUN_NETWORK:
     prods = prods[prods["productSubGroupDescription"] == "CAL"]
 
     Observations.download_products(prods, extension="fits")
+    
     jwst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/JWST/*/*cal.fits"),
-                                plant_location)['F150W'])
+                                plant_location)['F150W'])[:3]
 else:
     jwst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/JWST/*/*cal.fits"),
-                                plant_location)['F150W'])
+                                plant_location)['F150W'])[:3]
 if len(jwst_files) == 0:
     raise RuntimeError(
         "No JWST files found. Pre-download or set SPACE_PHOT_DOCS_NETWORK=1."

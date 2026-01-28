@@ -104,7 +104,7 @@ def mjd_dict_from_list(filelist, tolerance=0):
 def filter_dict_from_list(
     filelist,
     sky_location=None,
-    ext=0,
+    ext=1,
     buffer=0.0,
 ):
     """
@@ -141,8 +141,10 @@ def filter_dict_from_list(
             with fits.open(fname) as hdul:
                 header = hdul[ext].header
                 filt = header.get("FILTER")
-                if filt is None:
-                    continue
+                if filt is None and ext==1:
+                    filt = hdul[0].header.get('FILTER')    
+                    if filt is None:
+                        continue
 
                 # If sky check requested…
                 if sky_location is not None:
@@ -152,7 +154,6 @@ def filter_dict_from_list(
                     except Exception:
                         # WCS transform failed → exclude file
                         continue
-
                     # Reject NaNs or infs
                     if not np.isfinite(x) or not np.isfinite(y):
                         continue

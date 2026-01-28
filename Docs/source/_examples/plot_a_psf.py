@@ -38,9 +38,8 @@ import space_phot
 hst_obs_id = "hst_16264_12_wfc3_ir_f110w_iebc12"
 sn_hst = SkyCoord("21:29:40.2110", "+0:05:24.154", unit=(u.hourangle, u.deg))
 
-hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
-                            sn_hst)['F110W'])
-if (len(hst_files) == 0) and RUN_NETWORK:
+
+if RUN_NETWORK:
     from astroquery.mast import Observations
 
     obs_table = Observations.query_criteria(obs_id=hst_obs_id)
@@ -51,13 +50,14 @@ if (len(hst_files) == 0) and RUN_NETWORK:
     prods = prods[prods["calib_level"] == 2]
     prods = prods[prods["productSubGroupDescription"] == "FLT"]
 
-    prods3 = prods[prods["calib_level"] == 3]
-    prods3 = prods3[prods3["productSubGroupDescription"] == "DRZ"]
-
-    Observations.download_products(prods[:3], extension="fits")
-    Observations.download_products(prods3, extension="fits")
+    Observations.download_products(prods, extension="fits")
     hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
                             sn_hst)['F110W'])
+    hst_files = [x for x in hst_files if 'skycell' not in x]
+else:
+    hst_files = sorted(space_phot.util.filter_dict_from_list(glob.glob("mastDownload/HST/*/*flt.fits"),
+                            sn_hst)['F110W'])
+    hst_files = [x for x in hst_files if 'skycell' not in x]
 
 if len(hst_files) == 0:
     raise RuntimeError(
@@ -115,11 +115,11 @@ if RUN_NETWORK:
     obs_table = Observations.query_criteria(obs_id=jwst_obs_id)
     prods = Observations.get_product_list(obs_table)
 
-    prods = prods[prods["calib_level"] == 2]
-    prods = prods[prods["productSubGroupDescription"] == "CAL"]
-
     prods3 = prods[prods["calib_level"] == 3]
     prods3 = prods3[prods3["productSubGroupDescription"] == "I2D"]
+
+    prods = prods[prods["calib_level"] == 2]
+    prods = prods[prods["productSubGroupDescription"] == "CAL"]
 
     Observations.download_products(prods, extension="fits")
     Observations.download_products(prods3, extension="fits")
