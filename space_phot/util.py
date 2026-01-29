@@ -420,21 +420,29 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdi
         wcs_file = AsdfFile(tree)
         wcs_file.write_to(os.path.join(temp_outdir,'ref_wcs.asdf'))
         
-        pipe3 = Image3Pipeline()
-        pipe3.resample.output_wcs = os.path.join(temp_outdir,'ref_wcs.asdf')
-        pipe3.output_dir = outdir
-        pipe3.save_results = True
-        pipe3.tweakreg.skip = True
-        pipe3.outlier_detection.skip = True
-        pipe3.skymatch.skip = True
-        pipe3.source_catalog.skip = True
-        pipe3.resample.output_shape = st_obs3.data.shape
-        pipe3.outlier_detection.save_results = False
-        #pipe3.resample.output_shape = (dat['SCI',1].data.shape)
-        pipe3.resample.pixel_scale = st_obs3.pixel_scale#/4#[0]#/4
+        params = {'assign_mtwcs':  {'skip': True},
+                              'tweakreg':          {'skip': True},
+                              'skymatch':          {'skip': True},
+                              'outlier_detection': {'skip': True},
+                              'resample':          {'pixfrac'      : 1.,
+                                                    'kernel'       : 'square',
+                                                    #'pixel_scale'  : st_obs3.pixel_scale,
+                                                    #'rotation'     : ref_pa,#0, #-66.8983245393371,
+                                                    #'output_shape' : list(ref_image.shape),
+                                                    #'crpix'        : [0,0],
+                                                    #'crval'        : ref_crval,
+                                                    'fillval'      :'indef',
+                                                    'weight_type'  :'ivm',
+                                                    'output_wcs': os.path.join(temp_outdir,'ref_wcs.asdf'),
+                                                    #'single'       : True,
+                                                    #'blendheaders' : False,
 
-        #pipe3.resample.pixel_scale_ratio = st_obs3.pixel_scale/st_obs.pixel_scale[0]
-        pipe3.run(os.path.join(outdir,'cal_data_asn.json'))
+                                                    'in_memory' : False,
+                                                    'save_results' : True},
+                              'source_catalog':    {'skip': True}}
+        Image3Pipeline.call('cal_data_asn.json',steps=params,
+            output_dir=outdir,save_results=True)
+        
 
         #imwcs = None
         #level3 = None
