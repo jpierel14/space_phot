@@ -17,7 +17,7 @@ requires-python = ">=3.11"
 dependencies = [
   "numpy>=1.23",
   "scipy>=1.9",
-  "astropy>=7.1.1",
+  "astropy>=7.2.0",
   "photutils>=2.3",
   "matplotlib>=3.7",
   "sncosmo>=2.12.1",
@@ -32,7 +32,7 @@ dependencies = [
   "stdatamodels>=4.1.0",
   "stpipe>=0.11.0",
   "gwcs>=0.26.1",
-  "asdf>=4.5.0",
+  "asdf>=5.1.0",
 ]
 
 [project.optional-dependencies]

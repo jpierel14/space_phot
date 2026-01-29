@@ -1,7 +1,7 @@
 numpy>=1.23
 scipy>=1.9
 
-astropy>=7.1.1
+astropy>=7.2.0
 photutils>=2.3
 
 matplotlib>=3.7
@@ -21,6 +21,6 @@ jwst>=1.20
 stdatamodels>=4.1.0
 stpipe>=0.11.0
 gwcs>=0.26.1
-asdf>=4.5.0
+asdf>=5.1.0
 stsci.skypac>=1.0.11
 pytest
