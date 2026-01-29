@@ -440,7 +440,7 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdi
                                                     'in_memory' : False,
                                                     'save_results' : True},
                               'source_catalog':    {'skip': True}}
-        Image3Pipeline.call('cal_data_asn.json',steps=params,
+        Image3Pipeline.call(os.path.join(outdir,'cal_data_asn.json'),steps=params,
             output_dir=outdir,save_results=True)
         
 
