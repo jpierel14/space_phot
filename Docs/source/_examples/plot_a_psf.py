@@ -25,7 +25,7 @@ import astropy.units as u
 
 # Optional: network download
 RUN_NETWORK = os.environ.get("SPACE_PHOT_DOCS_NETWORK", "1") == "1"
-RUN_LEVEL3 = os.environ.get("SPACE_PHOT_DOCS_LEVEL3", "0") == "1"
+RUN_LEVEL3 = os.environ.get("SPACE_PHOT_DOCS_LEVEL3", "1") == "1"
 
 import space_phot
 

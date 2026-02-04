@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "space_phot"
-version = "0.4.0"
+version = "0.4.1"
 description = "Aperture and PSF photometry tools for HST and JWST data."
 authors = [
   { name = "Justin Pierel", email = "jpierel@stsci.edu" }
@@ -15,24 +15,14 @@ readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
-  "numpy>=1.23",
-  "scipy>=1.9",
-  "astropy>=7.2.0",
-  "photutils>=2.3",
-  "matplotlib>=3.7",
   "sncosmo>=2.12.1",
   "dynesty>=3.0.0",
   "dill>=0.3.6",
   "corner>=2.2",
   "stpsf>=2.1",
-  "poppy>=1.1.2",
-  "stsci.skypac>=1.0.11",
+  pytest,
   # JWST stack (only keep these if importing them at runtime)
   "jwst>=1.20",
-  "stdatamodels>=4.1.0",
-  "stpipe>=0.11.0",
-  "gwcs>=0.26.1",
-  "asdf>=5.1.0",
 ]
 
 [project.optional-dependencies]

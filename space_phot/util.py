@@ -266,7 +266,7 @@ def get_jwst_psf_from_grid(st_obs,sky_location,grid,psf_width=101):
         psf = np.array(grid(xf,yf)).astype(float)
         psf/=np.sum(psf)
         psf*=16
-        epsf_model = photutils.psf.FittableImageModel(psf,normalize=False,oversampling=4)
+        epsf_model = photutils.psf.ImagePSF(psf,oversampling=4)
         psf_list.append(epsf_model)
     return psf_list
 
@@ -306,9 +306,9 @@ def get_jwst_psf(st_obs,sky_location,psf_width=61,pipeline_level=2,fname=None,da
         #psf[0].data = astropy.convolution.convolve(psf[0].data, kernel)
         #stpsf.detectors.apply_detector_ipc(psf, extname=0)
 
-        #epsf_model = photutils.psf.FittableImageModel(psf[0].data*16,normalize=False,oversampling=oversampling)
-        #epsf_model = photutils.psf.FittableImageModel(grid.data[0,:,:]/np.sum(grid.data[0,:,:])*16,normalize=False,oversampling=oversampling)
-        epsf_model = photutils.psf.FittableImageModel(grid.data[0,:,:],normalize=False,oversampling=oversampling)
+        #epsf_model = photutils.psf.ImagePSF(psf[0].data*16,normalize=False,oversampling=oversampling)
+        #epsf_model = photutils.psf.ImagePSF(grid.data[0,:,:]/np.sum(grid.data[0,:,:])*16,normalize=False,oversampling=oversampling)
+        epsf_model = photutils.psf.ImagePSF(grid.data[0,:,:],oversampling=oversampling)
         psf_list.append(epsf_model)
     return psf_list
 
@@ -348,7 +348,7 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdi
     # #                        np.arange(-4*psf_width/2,psf_width/2*4+1,1).astype(int)+int(y+.5))
 
     # #    psf = np.array(grid(xf,yf)).astype(float)
-    #     epsf_model = photutils.psf.FittableImageModel(psf,normalize=True,oversampling=1)
+    #     epsf_model = photutils.psf.ImagePSF(psf,normalize=True,oversampling=1)
     #     psfs.append(epsf_model)
 
     outdir = os.path.join(temp_outdir,'temp_psf_dir')#%np.random.randint(0,1000))
@@ -391,34 +391,39 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdi
 
         ref_image = fits.open(st_obs3.fname)['SCI',1]
         ref_dm = datamodels.open(st_obs3.fname)
-        ref_wcs = wcs.WCS(ref_image)
-        transform = make_fitswcs_transform(ref_image.header) 
-        # 3. Define frames
-        detector_frame = cf.Frame2D(
-            name="detector",
-            axes_names=("x", "y"),
-            unit=(u.pix, u.pix),
-        )
+        gw = ref_dm.meta.wcs
+        ny, nx = ref_dm.data.shape
+        gw.bounding_box = ((0, nx), (0, ny))  # or (0, nx-1), depending on your convention
 
-        sky_frame = cf.CelestialFrame(
-            name="icrs",
-            reference_frame=coord.ICRS(),
-            unit=(u.deg, u.deg),
-        )
-        # 4. Build the GWCS pipeline
-        pipeline = [(detector_frame, transform), (sky_frame, None)]
-        gw = gwcs.WCS(pipeline)
+        AsdfFile({"wcs": gw}).write_to(os.path.join(temp_outdir, "ref_wcs.asdf"))
+        # ref_wcs = wcs.WCS(ref_image)
+        # transform = make_fitswcs_transform(ref_image.header) 
+        # # 3. Define frames
+        # detector_frame = cf.Frame2D(
+        #     name="detector",
+        #     axes_names=("x", "y"),
+        #     unit=(u.pix, u.pix),
+        # )
 
-        ny,nx = ref_image.data.shape
+        # sky_frame = cf.CelestialFrame(
+        #     name="icrs",
+        #     reference_frame=coord.ICRS(),
+        #     unit=(u.deg, u.deg),
+        # )
+        # # 4. Build the GWCS pipeline
+        # pipeline = [(detector_frame, transform), (sky_frame, None)]
+        # gw = gwcs.WCS(pipeline)
 
-        # 5. Set bounding box
-        # NOTE: GWCS uses "F" order: ((xmin, xmax), (ymin, ymax)) for (x, y) axes
-        gw.bounding_box = ((0, nx), (0, ny))
+        # ny,nx = ref_image.data.shape
 
-        #ref_wcs = #gwcs.wcs.WCS(ref_image)
-        tree = {"wcs": gw}
-        wcs_file = AsdfFile(tree)
-        wcs_file.write_to(os.path.join(temp_outdir,'ref_wcs.asdf'))
+        # # 5. Set bounding box
+        # # NOTE: GWCS uses "F" order: ((xmin, xmax), (ymin, ymax)) for (x, y) axes
+        # gw.bounding_box = ((0, nx), (0, ny))
+
+        # #ref_wcs = #gwcs.wcs.WCS(ref_image)
+        # tree = {"wcs": gw}
+        #wcs_file = AsdfFile(tree)
+        #wcs_file.write_to(os.path.join(temp_outdir,'ref_wcs.asdf'))
         
         params = {'assign_mtwcs':  {'skip': True},
                               'tweakreg':          {'skip': True},
@@ -465,7 +470,7 @@ def get_jwst3_psf(st_obs,st_obs3,sky_location,num_psfs=4,psf_width=31,temp_outdi
 
 
 
-        level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False,
+        level3_psf = photutils.psf.ImagePSF(level3[mx,my],
                                                       oversampling=1)
 
         #import pdb
@@ -539,10 +544,10 @@ def get_hst_psf(st_obs,sky_location,psf_width=25,pipeline_level=2):
         _psf_interp*=(hst_apcorr(5.6*st_obs.px_scale,st_obs.filter,st_obs.instrument))
 
         if pipeline_level==2:
-            psfmodel = photutils.psf.FittableImageModel(_psf_interp,
+            psfmodel = photutils.psf.ImagePSF(_psf_interp,
                                       oversampling=grid.oversampling)
         else:
-            psfmodel = photutils.psf.FittableImageModel(_psf_interp,
+            psfmodel = photutils.psf.ImagePSF(_psf_interp,
                                       oversampling=1)
         psfmodel.x_0 = x#int(x)
         psfmodel.y_0 = y#int(y)
@@ -616,7 +621,7 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
                 dat['SCI',st_obs.sci_ext].data = psfs[i](xf,yf)
 
                 #x,y = astropy.wcs.utils.skycoord_to_pixel(sky_location,wcs.WCS(dat[1],dat))
-                #psf2 = photutils.psf.FittableImageModel(psfs[i].data,normalize=False,
+                #psf2 = photutils.psf.ImagePSF(psfs[i].data,normalize=False,
                 #                                          oversampling=1)
                 #psf2.x_0 = x
                 #psf2.y_0 = y
@@ -679,10 +684,10 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         #level3[mx,my]*=(np.median(level2_sums)/simple_aperture_sum(level3[mx,my],[[level3[mx,my].shape[0]/2,
         #                                    level3[mx,my].shape[1]/2]],5.6*4))
         #level3[mx,my]*=16
-        level3_psf = photutils.psf.FittableImageModel(level3[mx,my],normalize=False,
+        level3_psf = photutils.psf.ImagePSF(level3[mx,my],
                                                       oversampling=4)
         #kernel = astropy.convolution.Box2DKernel(width=4)
-        #level3_psf = photutils.psf.FittableImageModel(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False,
+        #level3_psf = photutils.psf.ImagePSF(astropy.convolution.convolve(level3[mx,my], kernel),normalize=False,
         #                                              oversampling=4)
         #sys.exit()
         shutil.rmtree(outdir)
