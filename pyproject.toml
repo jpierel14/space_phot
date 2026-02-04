@@ -20,7 +20,7 @@ dependencies = [
   "dill>=0.3.6",
   "corner>=2.2",
   "stpsf>=2.1",
-  pytest,
+  "pytest",
   # JWST stack (only keep these if importing them at runtime)
   "jwst>=1.20",
 ]
