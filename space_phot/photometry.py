@@ -1203,7 +1203,7 @@ class observation3(observation):
             # For JWST: noise-scale factor for the aperture-phot error model
             # (keep your existing behavior here)
             epadu = self.sci_header.get("XPOSURE", 1.0) * self.sci_header.get("PHOTMJSR", 1.0)
-
+            apcorr = 1/apcorr # jwst apcorr > 1, hst < 1 
 
         else:
             # HST
