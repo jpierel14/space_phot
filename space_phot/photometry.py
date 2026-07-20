@@ -626,29 +626,31 @@ class observation3(observation):
     """
     st_phot class for level 3 (drizzled) data
     """
-    def __init__(self,fname):
+    def __init__(self,fname,sci_ext=1):
         self.pipeline_level = 3
         self.fname = fname
+        self.sci_ext = int(sci_ext)
+        
         self.fits = astropy.io.fits.open(self.fname)
         
 
-        self.data = self.fits['SCI',1].data
+        self.data = self.fits['SCI',self.sci_ext].data
 
         try:            
-            self.err = self.fits['ERR',1].data
+            self.err = self.fits['ERR',self.sci_ext].data
         except:
             try:
-                self.err = 1./np.sqrt(self.fits['WHT',1].data)
+                self.err = 1./np.sqrt(self.fits['WHT',self.sci_ext].data)
             except:
                 self.err = np.sqrt(self.data)
 
         try:
-            self.dq = self.fits['DQ',1].data
+            self.dq = self.fits['DQ',self.sci_ext].data
         except:
             self.dq = np.zeros(self.data.shape)
 
         self.prim_header = self.fits[0].header
-        self.sci_header = self.fits['SCI',1].header
+        self.sci_header = self.fits['SCI',self.sci_ext].header
 
         self.wcs = astropy.wcs.WCS(self.sci_header)
         self.pams = [np.ones(self.data.shape)]
@@ -1388,7 +1390,7 @@ class observation3(observation):
             plant_info['flux'].append(np.sum(psf_arr))
             
 
-            temp['SCI',1].data[xf,yf]+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
+            temp['SCI',self.sci_ext].data[xf,yf]+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
                 #psf_arr,[x,y])
         astropy.table.Table(plant_info).write(out_fname.replace('.fits','.dat'),overwrite=True,
                                               format='ascii.ecsv')
@@ -1587,7 +1589,7 @@ class observation2(observation):
                 plant_info['flux'].append(np.sum(psf_arr))
                 
 
-                temp['SCI',1].data+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
+                temp['SCI',self.sci_ext].data+=psf_arr# = astropy.nddata.add_array(temp['SCI',1].data,
                     #psf_arr,[x,y])
             if not multi_plant or first_plant:
                 astropy.table.Table(plant_info).write(self.exposure_fnames[i].replace('.fits','_plant.dat'),overwrite=True,
