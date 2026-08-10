@@ -16,7 +16,7 @@ from dynesty.pool import Pool
 
 
 import photutils
-from photutils.psf import EPSFModel
+from photutils.psf import ImagePSF
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -732,8 +732,8 @@ class observation3(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         sky_location : :class:`~astropy.coordinates.SkyCoord`
             Location of your source
@@ -861,6 +861,8 @@ class observation3(observation):
                 
         else:
             centers.append([xi+centroidx_shift,yi+centroidy_shift])
+
+        center = centers[-1]
         all_xf.append(xf)
         all_yf.append(yf)
         cutout[cutout<minVal] = 0
@@ -1333,8 +1335,8 @@ class observation3(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         plant_locations : list
             The location(s) to plant the psf
@@ -1502,8 +1504,8 @@ class observation2(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         plant_locations : list
             The location(s) to plant the psf
@@ -1882,8 +1884,8 @@ class observation2(observation):
 
         Parameters
         ----------
-        psf_model : :class:`~photutils.psf.EPSFModel`
-            In reality this does not need to be an EPSFModel, but just any
+        psf_model : :class:`~photutils.psf.ImagePSF`
+            In reality this does not need to be an ImagePSF, but just any
             photutils psf model class.
         sky_location : :class:`~astropy.coordinates.SkyCoord`
             Location of your source

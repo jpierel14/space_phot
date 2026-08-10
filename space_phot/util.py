@@ -46,7 +46,7 @@ from photutils.aperture import (
     CircularAnnulus,
     aperture_photometry,
 )
-from photutils.psf import EPSFModel
+from photutils.psf import ImagePSF
 
 import jwst
 #from jwst import datamodels
@@ -702,7 +702,7 @@ def get_hst_psf(st_obs,sky_location,psf_width=25,pipeline_level=2):
         #continue
         #print(x,y)
 
-        #epsf_model = EPSFModel(psf)
+        #epsf_model = ImagePSF(psf)
         #psf_list.append(epsf_model)
     return psf_list
 
