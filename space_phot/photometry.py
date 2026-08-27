@@ -1771,6 +1771,7 @@ class observation2(observation):
                     * self.wcs_list[i].wcs.cunit[0].to("arcsec")
                 )
                 apcorr_arr = hst_apcorr(radius_i * px_scale, self.filter, self.detector)
+                
                 try:
                     apcorr = float(apcorr_arr[0])
                 except Exception:
