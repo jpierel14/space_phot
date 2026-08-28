@@ -1802,22 +1802,22 @@ class observation2(observation):
             # Fill raw result
             result["pos_x"].append(float(positions[0][0]))
             result["pos_y"].append(float(positions[0][1]))
-            result["aper_bkg"].append(float(phot["aper_bkg"]))
-            result["aperture_sum"].append(float(phot["aperture_sum"]))
+            result["aper_bkg"].append(float(np.ravel(phot["aper_bkg"])))
+            result["aperture_sum"].append(float(np.ravel(phot["aperture_sum"])))
             result["aperture_sum_err"].append(
-                float(phot["aperture_sum_err"]) if "aperture_sum_err" in phot.colnames else 0.0
+                float(np.ravel(phot["aperture_sum_err"])) if "aperture_sum_err" in phot.colnames else 0.0
             )
-            result["aper_sum_bkgsub"].append(float(phot["aper_sum_bkgsub"]))
-            result["annulus_median"].append(float(phot["annulus_median"]))
+            result["aper_sum_bkgsub"].append(float(np.ravel(phot["aper_sum_bkgsub"])))
+            result["annulus_median"].append(float(np.ravel(phot["annulus_median"])))
             expname = os.path.basename(self.exposure_fnames[i])
             result["exp"].append(expname)
 
             # Apply aperture correction
             if self.telescope.lower() == "jwst":
-                corr = float(phot["aper_sum_bkgsub"] * apcorr)
+                corr = float(np.ravel(phot["aper_sum_bkgsub"]) * apcorr)
                 err_corr = result["aperture_sum_err"][-1] * apcorr
             else:
-                corr = float(phot["aper_sum_bkgsub"] / apcorr)
+                corr = float(np.ravel(phot["aper_sum_bkgsub"]) / apcorr)
                 err_corr = result["aperture_sum_err"][-1] / apcorr
 
             result["aper_sum_corrected"].append(corr)
