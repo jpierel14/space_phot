@@ -492,7 +492,7 @@ def _build_output_gwcs_from_fits_header(ref_fname):
 
     sky_frame = cf.CelestialFrame(
         reference_frame=wcs_to_celestial_frame(awcs),
-        name="sky",
+        name="world",
         unit=(u.deg, u.deg),
     )
 
