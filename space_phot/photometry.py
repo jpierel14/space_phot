@@ -30,6 +30,7 @@ from .util import (
     jwst_apcorr_interp,
     hst_apcorr,
     simple_aperture_sum,
+    apcorr_radius_in_native_pixels
 )
 
 from .cal import (
@@ -1084,7 +1085,7 @@ class observation3(observation):
         skyan_in=None,
         skyan_out=None,
         alternate_ref=None,
-        radius_in_arcsec=False,
+        radius_in_arcsec=False
     ):
         """
         Perform aperture photometry on a single drizzled (level 3) image.
@@ -1193,6 +1194,15 @@ class observation3(observation):
         sky_in_pix = skyan_in
         sky_out_pix = skyan_out
 
+        r_apcorr_pxcorr = apcorr_radius_in_native_pixels(
+            radius_pixels=1,
+            image_pixel_scale=self.pixel_scale,
+            telescope=self.telescope,
+            instrument=self.instrument,
+            filt=self.filter
+        )
+        
+
         if self.telescope.upper() == "JWST":
             # JWST: aperture correction lookup/interp
             if ee is not None:
@@ -1209,9 +1219,12 @@ class observation3(observation):
                 if sky_out_pix is None:
                     sky_out_pix = float(ref_sky_out_pix)
 
+                radius/=r_apcorr_pxcorr
+                sky_in_pix/=r_apcorr_pxcorr
+                sky_out_pix/=r_apcorr_pxcorr
             else:
                 # jwst_apcorr_interp expects radius in PIXELS
-                apres = jwst_apcorr_interp(self.fname, float(radius), alternate_ref=alternate_ref)
+                apres = jwst_apcorr_interp(self.fname, float(radius)*r_apcorr_pxcorr, alternate_ref=alternate_ref)
                 if apres is None:
                     raise RuntimeError(
                         f"Failed JWST aperture correction interpolation for radius={radius} px."
@@ -1219,9 +1232,9 @@ class observation3(observation):
 
                 ee, apcorr, ref_sky_in_pix, ref_sky_out_pix = apres
                 if sky_in_pix is None:
-                    sky_in_pix = float(ref_sky_in_pix)
+                    sky_in_pix = float(ref_sky_in_pix)/r_apcorr_pxcorr
                 if sky_out_pix is None:
-                    sky_out_pix = float(ref_sky_out_pix)
+                    sky_out_pix = float(ref_sky_out_pix)/r_apcorr_pxcorr
 
             # For JWST: noise-scale factor for the aperture-phot error model
             # (keep your existing behavior here)
@@ -1802,22 +1815,23 @@ class observation2(observation):
             # Fill raw result
             result["pos_x"].append(float(positions[0][0]))
             result["pos_y"].append(float(positions[0][1]))
-            result["aper_bkg"].append(float(np.ravel(phot["aper_bkg"])))
-            result["aperture_sum"].append(float(np.ravel(phot["aperture_sum"])))
+
+            result["aper_bkg"].append(float(np.ravel(np.array(phot["aper_bkg"]))[0]))
+            result["aperture_sum"].append(float(np.ravel(np.array(phot["aperture_sum"]))[0]))
             result["aperture_sum_err"].append(
-                float(np.ravel(phot["aperture_sum_err"])) if "aperture_sum_err" in phot.colnames else 0.0
+                float(np.ravel(np.array(phot["aperture_sum_err"]))[0]) if "aperture_sum_err" in phot.colnames else 0.0
             )
-            result["aper_sum_bkgsub"].append(float(np.ravel(phot["aper_sum_bkgsub"])))
-            result["annulus_median"].append(float(np.ravel(phot["annulus_median"])))
+            result["aper_sum_bkgsub"].append(float(np.ravel(np.array(phot["aper_sum_bkgsub"]))[0]))
+            result["annulus_median"].append(float(np.ravel(np.array(phot["annulus_median"]))[0]))
             expname = os.path.basename(self.exposure_fnames[i])
             result["exp"].append(expname)
 
             # Apply aperture correction
             if self.telescope.lower() == "jwst":
-                corr = float(np.ravel(phot["aper_sum_bkgsub"]) * apcorr)
+                corr = float(np.ravel(np.array(phot["aper_sum_bkgsub"]))[0] * apcorr)
                 err_corr = result["aperture_sum_err"][-1] * apcorr
             else:
-                corr = float(np.ravel(phot["aper_sum_bkgsub"]) / apcorr)
+                corr = float(np.ravel(np.array(phot["aper_sum_bkgsub"]))[0] / apcorr)
                 err_corr = result["aperture_sum_err"][-1] / apcorr
 
             result["aper_sum_corrected"].append(corr)

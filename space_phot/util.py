@@ -836,6 +836,55 @@ def get_hst3_psf(st_obs,st_obs3,sky_location,psf_width=25):
         shutil.rmtree(outdir)
     return level3_psf
 
+
+def native_pixel_scale(telescope, instrument, filt=None, detector=None):
+    """Return nominal native pixel scale in arcsec/pixel."""
+    telescope = telescope.upper()
+    instrument = instrument.upper().replace("/", "")
+    filt = (filt or "").upper()
+    detector = (detector or "").upper()
+
+    if telescope == "JWST":
+        if instrument == "NIRCAM":
+            # Prefer detector identity when available
+            if detector.endswith("5") or detector.endswith("LONG"):
+                return 0.063
+            if detector and detector[-1:] in "1234":
+                return 0.031
+
+            # Otherwise infer channel from the filter
+            if filt.startswith("F") and filt[1:4].isdigit():
+                return 0.031 if int(filt[1:4]) < 240 else 0.063
+
+            raise ValueError("Cannot determine NIRCam channel")
+
+        return {
+            "NIRISS": 0.0656,
+            "MIRI": 0.11,
+            "FGS": 0.069,
+        }[instrument]
+
+    if telescope == "HST":
+        return {
+            "WFC3UVIS": 0.040,
+            "WFC3IR": 0.130,
+            "ACSWFC": 0.050,
+            "ACSHRC": 0.028,
+        }[instrument]
+
+    raise ValueError(f"Unsupported telescope: {telescope}")
+
+
+def apcorr_radius_in_native_pixels(
+    radius_pixels, image_pixel_scale,
+    telescope, instrument, filt=None, detector=None
+):
+    native_scale = native_pixel_scale(
+        telescope, instrument, filt, detector
+    )
+    return radius_pixels * image_pixel_scale / native_scale
+
+
 def jwst_apcorr_interp(fname, radius, alternate_ref: Optional[str] = None):
     """
     Interpolate JWST imaging aperture correction as a function of aperture radius (pixels),
@@ -899,7 +948,7 @@ def jwst_apcorr_interp(fname, radius, alternate_ref: Optional[str] = None):
                     )
 
             sub = tab[m]
-
+            
             # Collect arrays
             r = np.array(sub["radius"], dtype=float)        # pixels
             c = np.array(sub["apcorr"], dtype=float)
