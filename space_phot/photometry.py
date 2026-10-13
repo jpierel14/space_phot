@@ -1194,16 +1194,17 @@ class observation3(observation):
         sky_in_pix = skyan_in
         sky_out_pix = skyan_out
 
-        r_apcorr_pxcorr = apcorr_radius_in_native_pixels(
-            radius_pixels=1,
-            image_pixel_scale=self.pixel_scale,
-            telescope=self.telescope,
-            instrument=self.instrument,
-            filt=self.filter
-        )
+        
         
 
         if self.telescope.upper() == "JWST":
+            r_apcorr_pxcorr = apcorr_radius_in_native_pixels(
+                radius_pixels=1,
+                image_pixel_scale=self.pixel_scale,
+                telescope=self.telescope,
+                instrument=self.instrument,
+                filt=self.filter
+            )
             # JWST: aperture correction lookup/interp
             if ee is not None:
                 apres = jwst_apcorr(self.fname, ee, alternate_ref=alternate_ref)
